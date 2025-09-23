@@ -8,11 +8,9 @@ import { ArrowLeft, CalendarDays, Users } from "lucide-react"
 import ObservationEditor from "./view.client"
 import VoiceNoteRecorder from "../_components/VoiceNoteRecorder.client"
 
-
 export const dynamic = "force-dynamic"
 
 type PageProps = {
-  // params comes as a Promise in the App Router; await it before using
   params: Promise<{ id: string }>
 }
 
@@ -20,11 +18,9 @@ export default async function ObservationDetail({ params }: PageProps) {
   const { id } = await params
   const supabase = await createClient()
 
-  // Auth guard
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) redirect(`/auth?redirect_to=/scout/observations/${id}`)
 
-  // Load session + players
   const [{ data: obs }, { data: list }] = await Promise.all([
     supabase
       .from("observation_sessions")
@@ -59,6 +55,25 @@ export default async function ObservationDetail({ params }: PageProps) {
     )
   }
 
+  // --- Normalize nested arrays -> single object (or null) ---
+  type RawRow = {
+    id: string
+    observation_id: string
+    player_id: string | null
+    player_entry_id: string | null
+    minutes_watched: number | null
+    rating: number | null
+    notes: string | null
+    players: { id: string; full_name: string; image_url: string | null; transfermarkt_url: string | null }[] | null
+    scout_player_entries: { id: string; full_name: string; image_url: string | null; transfermarkt_url: string | null }[] | null
+  }
+
+  const rows = ((list ?? []) as RawRow[]).map(r => ({
+    ...r,
+    players: r.players?.[0] ?? null,
+    scout_player_entries: r.scout_player_entries?.[0] ?? null,
+  }))
+
   return (
     <div className="space-y-4">
       {/* Top bar: back button + quick meta */}
@@ -81,7 +96,6 @@ export default async function ObservationDetail({ params }: PageProps) {
             {obs.match_date || "—"}
             {obs.opponent ? ` • vs ${obs.opponent}` : ""}
           </div>
-          {/* quick count is optional; editor shows details anyway */}
           <div className="inline-flex items-center gap-1.5">
             <Users className="h-3.5 w-3.5" />
             Players
@@ -89,8 +103,7 @@ export default async function ObservationDetail({ params }: PageProps) {
         </div>
       </div>
 
-      {/* Main editor */}
-      <ObservationEditor session={obs} rows={list ?? []} />
+      <ObservationEditor session={obs} rows={rows} />
     </div>
   )
 }

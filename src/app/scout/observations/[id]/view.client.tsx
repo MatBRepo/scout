@@ -377,11 +377,15 @@ export default function ObservationEditor({ session: initial, rows: initialRows 
         .single()
       if (error) throw error
 
-      // attach to my players
-      await supabase.from("players_scouts").insert({
-        player_id: player.id,
-        scout_id: uid,
-      }).catch(() => {})
+// attach to my players (idempotent)
+const { error: mapErr } = await supabase
+  .from("players_scouts")
+  .upsert({ player_id: player.id, scout_id: uid }, { onConflict: "scout_id,player_id" })
+
+// It's safe to ignore duplicates; only surface real errors if you want
+if (mapErr && mapErr.code !== "23505") {
+  console.warn("players_scouts upsert warning:", mapErr.message)
+}
 
       // immediately add to this observation
       await addToObservation({ type: "player", id: player.id })

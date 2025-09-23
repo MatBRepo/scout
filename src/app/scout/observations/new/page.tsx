@@ -8,12 +8,12 @@ import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Button } from "@/components/ui/button"
 import { toast } from "sonner"
-import { CalendarDays, Save } from "lucide-react"
+import { Save } from "lucide-react"
 
 export default function NewObservation() {
   const supabase = createClient()
   const router = useRouter()
-  const [isPending, start] = useTransition()
+  const [isPending, startTransition] = useTransition()
 
   const [title, setTitle] = useState("")
   const [matchDate, setMatchDate] = useState("")
@@ -22,21 +22,40 @@ export default function NewObservation() {
   const [location, setLocation] = useState("")
 
   const submit = () => {
-    if (!matchDate) return toast.error("Match date is required")
-    start(async () => {
-      const { data: { user } } = await supabase.auth.getUser()
-      if (!user) { router.push("/auth?redirect_to=/scout/observations/new"); return }
-      const { data, error } = await supabase.from("observation_sessions").insert({
-        scout_id: user.id,
-        title: title || null,
-        match_date: matchDate,
-        competition: competition || null,
-        opponent: opponent || null,
-        location: location || null,
-      }).select("id").single()
-      if (error) return toast.error(error.message)
-      toast.success("Observation created")
-      router.push(`/scout/observations/${data.id}`)
+    if (!matchDate) {
+      toast.error("Match date is required")
+      return
+    }
+
+    startTransition(() => {
+      ;(async () => {
+        const { data: { user } } = await supabase.auth.getUser()
+        if (!user) {
+          router.push("/auth?redirect_to=/scout/observations/new")
+          return
+        }
+
+        const { data, error } = await supabase
+          .from("observation_sessions")
+          .insert({
+            scout_id: user.id,
+            title: title || null,
+            match_date: matchDate,
+            competition: competition || null,
+            opponent: opponent || null,
+            location: location || null,
+          })
+          .select("id")
+          .single()
+
+        if (error) {
+          toast.error(error.message)
+          return
+        }
+
+        toast.success("Observation created")
+        router.push(`/scout/observations/${data.id}`)
+      })()
     })
   }
 
