@@ -700,15 +700,23 @@ function ObservationsPanel({
 
       const sess = sessions.find(s => s.id === chosenSession)
       if (sess?.match_date) {
-        await supabase.from("observations").insert({
-          scout_id: userId,
-          player_id: playerId,
-          match_date: sess.match_date,
-          competition: null,
-          opponent: null,
-          minutes_watched: null,
-          notes: null,
-        }).catch(() => {})
+const { error: obsErr } = await supabase
+  .from("observations")
+  .insert({
+    scout_id: userId,
+    player_id: playerId,
+    match_date: sess.match_date,
+    competition: null,
+    opponent: null,
+    minutes_watched: null,
+    notes: null,
+  })
+
+// optional: ignore or log
+if (obsErr) {
+  console.warn("Insert observations failed:", obsErr.message)
+}
+
         const { data } = await supabase
           .from("observations")
           .select("id, match_date, competition, opponent, minutes_watched, notes, created_at")

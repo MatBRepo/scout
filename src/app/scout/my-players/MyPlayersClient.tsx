@@ -401,18 +401,19 @@ export default function MyPlayersClient({ rows }: { rows: Row[] }) {
         .select("id, full_name, main_position, current_club_name, current_club_country, image_url, transfermarkt_url")
         .eq("id", pid)
         .single()
-      const addRow: Row = prErr || !pr
-        ? {
-            // @ts-expect-error partial
-            id: item.snapshot?.id || pid,
-            full_name: item.snapshot?.full_name || "Player",
-            main_position: item.snapshot?.main_position || null,
-            current_club_name: item.snapshot?.current_club_name || null,
-            current_club_country: item.snapshot?.current_club_country || null,
-            image_url: item.snapshot?.image_url || null,
-            transfermarkt_url: item.snapshot?.transfermarkt_url || null,
-          }
-        : (pr as Row)
+const addRow: Row =
+  pr && !prErr
+    ? (pr as Row)
+    : {
+        id: item.snapshot?.id ?? pid,
+        full_name: item.snapshot?.full_name ?? "Player",
+        main_position: item.snapshot?.main_position ?? null,
+        current_club_name: item.snapshot?.current_club_name ?? null,
+        current_club_country: item.snapshot?.current_club_country ?? null,
+        image_url: item.snapshot?.image_url ?? null,
+        transfermarkt_url: item.snapshot?.transfermarkt_url ?? null,
+      }
+
 
       setLocalItems(prev => {
         const exists = prev.some(p => p.id === pid)
@@ -618,42 +619,44 @@ export default function MyPlayersClient({ rows }: { rows: Row[] }) {
           </div>
 
           <div className="mt-3 grid gap-2 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
-            {trash.map((t) => {
-              const snap = t.snapshot || {}
-              return (
-                <div key={`${t.scout_id}-${t.player_id}`} className="flex items-center gap-3 rounded-xl border p-3">
-                  <PlayerAvatar src={snap.image_url || null} alt={snap.full_name || "Player"} />
-                  <div className="min-w-0">
-                    <div className="truncate text-sm font-medium">{snap.full_name || t.player_id}</div>
-                    <div className="truncate text-[11px] text-muted-foreground">
-                      {snap.main_position || "—"}{snap.current_club_name ? ` · ${snap.current_club_name}` : ""}
-                      {snap.current_club_country ? ` (${snap.current_club_country})` : ""}
-                    </div>
-                    <div className="text-[11px] text-muted-foreground">
-                      Removed {new Date(t.removed_at).toLocaleDateString()}
-                    </div>
-                  </div>
-                  <div className="ml-auto flex items-center gap-2">
-                    {snap.transfermarkt_url && (
-                      <Button asChild size="sm" variant="outline">
-                        <a href={snap.transfermarkt_url} target="_blank" rel="noreferrer">
-                          TM <ExternalLink className="ml-1 h-3 w-3" />
-                        </a>
-                      </Button>
-                    )}
-                    <Button
-                      size="sm"
-                      onClick={() => restoreFromTrash(t)}
-                      disabled={!!restoringByPlayer[t.player_id]}
-                    >
-                      {restoringByPlayer[t.player_id]
-                        ? <><Loader2 className="mr-1 h-4 w-4 animate-spin" />Restoring…</>
-                        : <><RotateCcw className="mr-1 h-4 w-4" />Restore</>}
-                    </Button>
-                  </div>
-                </div>
-              )
-            })}
+{trash.map((t) => {
+  const snap = t.snapshot; // may be undefined
+  return (
+    <div key={`${t.scout_id}-${t.player_id}`} className="flex items-center gap-3 rounded-xl border p-3">
+      <PlayerAvatar src={snap?.image_url ?? null} alt={snap?.full_name ?? "Player"} />
+      <div className="min-w-0">
+        <div className="truncate text-sm font-medium">{snap?.full_name ?? t.player_id}</div>
+        <div className="truncate text-[11px] text-muted-foreground">
+          {(snap?.main_position ?? "—")}
+          {snap?.current_club_name ? ` · ${snap.current_club_name}` : ""}
+          {snap?.current_club_country ? ` (${snap.current_club_country})` : ""}
+        </div>
+        <div className="text-[11px] text-muted-foreground">
+          Removed {new Date(t.removed_at).toLocaleDateString()}
+        </div>
+      </div>
+      <div className="ml-auto flex items-center gap-2">
+        {snap?.transfermarkt_url && (
+          <Button asChild size="sm" variant="outline">
+            <a href={snap.transfermarkt_url} target="_blank" rel="noreferrer">
+              TM <ExternalLink className="ml-1 h-3 w-3" />
+            </a>
+          </Button>
+        )}
+        <Button
+          size="sm"
+          onClick={() => restoreFromTrash(t)}
+          disabled={!!restoringByPlayer[t.player_id]}
+        >
+          {restoringByPlayer[t.player_id]
+            ? (<><Loader2 className="mr-1 h-4 w-4 animate-spin" />Restoring…</>)
+            : (<><RotateCcw className="mr-1 h-4 w-4" />Restore</>)}
+        </Button>
+      </div>
+    </div>
+  )
+})}
+
           </div>
         </Card>
       )}
