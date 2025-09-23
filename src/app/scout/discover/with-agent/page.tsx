@@ -1,7 +1,7 @@
 import { createClient } from "@/lib/supabase/server"
 
 export default async function WithAgentPage() {
-  const supabase = createClient() // sync, server-safe
+  const supabase = await createClient() // sync, server-safe
 
   // (Optional) sanity check; remove after first run
   if (typeof (supabase as any).from !== "function") {

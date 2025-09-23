@@ -1,7 +1,7 @@
 import { createClient } from "@/lib/supabase/server"
 
 export default async function WithoutAgentPage() {
-  const supabase = createClient() // sync, server-safe
+  const supabase = await createClient() // sync, server-safe
 
   const { data, error } = await supabase
     .from("v_discover_players")
