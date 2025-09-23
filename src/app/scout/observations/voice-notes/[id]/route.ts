@@ -1,5 +1,5 @@
 // src/app/scout/observations/voice-notes/[id]/route.ts
-import { NextRequest, NextResponse } from "next/server"
+import { NextResponse } from "next/server"
 import { createServerClient } from "@supabase/ssr"
 import { cookies } from "next/headers"
 
@@ -16,6 +16,7 @@ function supabaseFromCookies() {
         get(name: string) {
           return cookieStore.get(name)?.value
         },
+        // No-ops (the server runtime doesn't mutate request cookies)
         set() {},
         remove() {},
       },
@@ -23,9 +24,17 @@ function supabaseFromCookies() {
   )
 }
 
+type PatchBody = {
+  transcript?: string
+  language?: string | null
+}
+
 // PATCH /scout/observations/voice-notes/:id
-export async function PATCH(req: NextRequest, { params }: { params: { id: string } }) {
-  const id = params?.id
+export async function PATCH(
+  req: Request,
+  ctx: { params: Promise<{ id: string }> }
+) {
+  const { id } = await ctx.params
   if (!id) return NextResponse.json({ ok: false, error: "missing id" }, { status: 400 })
 
   try {
@@ -42,14 +51,16 @@ export async function PATCH(req: NextRequest, { params }: { params: { id: string
       .select("id, scout_id, storage_path, language")
       .eq("id", id)
       .single()
+
     if (selErr) return NextResponse.json({ ok: false, error: selErr.message }, { status: 404 })
-    if (note.scout_id !== user.id) return NextResponse.json({ ok: false, error: "forbidden" }, { status: 403 })
+    if (!note || note.scout_id !== user.id) {
+      return NextResponse.json({ ok: false, error: "forbidden" }, { status: 403 })
+    }
 
     // read body (may contain transcript from browser)
-    let body: any = {}
-    try { body = await req.json() } catch {}
-    const incomingTranscript = (body?.transcript ?? "").toString().trim()
-    const language = (body?.language ?? note.language ?? null) as string | null
+    const body = (await req.json().catch(() => ({}))) as Partial<PatchBody>
+    const incomingTranscript = (body.transcript ?? "").toString().trim()
+    const language = (body.language ?? note.language ?? null) as string | null
 
     // 1) If client provided transcript, save it immediately (no OpenAI).
     if (incomingTranscript) {
@@ -57,13 +68,14 @@ export async function PATCH(req: NextRequest, { params }: { params: { id: string
         .from("observation_voice_notes")
         .update({ transcript: incomingTranscript, language, status: "done" })
         .eq("id", id)
+
       if (updErr) return NextResponse.json({ ok: false, error: updErr.message }, { status: 400 })
       return NextResponse.json({ ok: true, transcript: incomingTranscript })
     }
 
     // 2) Otherwise, try server transcription only if explicitly enabled.
     const OPENAI_API_KEY = process.env.OPENAI_API_KEY
-    const CAN_SERVER_TRANSCRIBE = !!OPENAI_API_KEY // only OpenAI path implemented here
+    const CAN_SERVER_TRANSCRIBE = !!OPENAI_API_KEY
     if (!CAN_SERVER_TRANSCRIBE) {
       return NextResponse.json(
         { ok: false, error: "Server transcription disabled" },
@@ -78,9 +90,13 @@ export async function PATCH(req: NextRequest, { params }: { params: { id: string
     const { data: signed, error: signErr } = await supabase
       .storage.from("obs-audio")
       .createSignedUrl(note.storage_path, 60)
+
     if (signErr || !signed?.signedUrl) {
       await supabase.from("observation_voice_notes").update({ status: "error" }).eq("id", id)
-      return NextResponse.json({ ok: false, error: signErr?.message || "signed URL failed" }, { status: 400 })
+      return NextResponse.json(
+        { ok: false, error: signErr?.message || "signed URL failed" },
+        { status: 400 }
+      )
     }
 
     const audioRes = await fetch(signed.signedUrl)
@@ -91,7 +107,7 @@ export async function PATCH(req: NextRequest, { params }: { params: { id: string
     const arrayBuf = await audioRes.arrayBuffer()
     const blob = new Blob([arrayBuf], { type: audioRes.headers.get("content-type") || "audio/webm" })
 
-    // OpenAI Whisper (only if enabled)
+    // OpenAI Whisper call
     const form = new FormData()
     form.append("file", blob, "note.webm")
     form.append("model", "whisper-1")
@@ -107,34 +123,44 @@ export async function PATCH(req: NextRequest, { params }: { params: { id: string
     const ct = aiRes.headers.get("content-type") || ""
     let text = ""
     if (ct.includes("application/json")) {
-      const j = await aiRes.json().catch(() => ({}))
+      const j = (await aiRes.json().catch(() => ({}))) as { text?: string; error?: { message?: string } }
       if (!aiRes.ok) {
         await supabase.from("observation_voice_notes").update({ status: "error" }).eq("id", id)
-        return NextResponse.json({ ok: false, error: j?.error?.message || `OpenAI error ${aiRes.status}` }, { status: aiRes.status })
+        return NextResponse.json(
+          { ok: false, error: j?.error?.message || `OpenAI error ${aiRes.status}` },
+          { status: aiRes.status }
+        )
       }
       text = j?.text || ""
     } else {
       const raw = await aiRes.text()
       await supabase.from("observation_voice_notes").update({ status: "error" }).eq("id", id)
-      return NextResponse.json({ ok: false, error: `OpenAI non-JSON ${aiRes.status}: ${raw.slice(0, 200)}` }, { status: 502 })
+      return NextResponse.json(
+        { ok: false, error: `OpenAI non-JSON ${aiRes.status}: ${raw.slice(0, 200)}` },
+        { status: 502 }
+      )
     }
 
     const { error: updErr } = await supabase
       .from("observation_voice_notes")
       .update({ transcript: text, language, status: "done" })
       .eq("id", id)
-    if (updErr) return NextResponse.json({ ok: false, error: updErr.message }, { status: 400 })
 
+    if (updErr) return NextResponse.json({ ok: false, error: updErr.message }, { status: 400 })
     return NextResponse.json({ ok: true, transcript: text })
-  } catch (err: any) {
-    return NextResponse.json({ ok: false, error: err?.message || "unexpected error" }, { status: 500 })
+  } catch (err) {
+    const message = err instanceof Error ? err.message : "unexpected error"
+    return NextResponse.json({ ok: false, error: message }, { status: 500 })
   }
 }
 
-
-export async function DELETE(_req: NextRequest, { params }: { params: { id: string } }) {
-  const id = params?.id
+export async function DELETE(
+  _req: Request,
+  ctx: { params: Promise<{ id: string }> }
+) {
+  const { id } = await ctx.params
   if (!id) return NextResponse.json({ ok: false, error: "missing id" }, { status: 400 })
+
   try {
     const supabase = supabaseFromCookies()
     const { data: auth } = await supabase.auth.getUser()
@@ -148,13 +174,17 @@ export async function DELETE(_req: NextRequest, { params }: { params: { id: stri
       .single()
 
     if (selErr) return NextResponse.json({ ok: false, error: selErr.message }, { status: 404 })
-    if (note.scout_id !== user.id) return NextResponse.json({ ok: false, error: "forbidden" }, { status: 403 })
+    if (!note || note.scout_id !== user.id) {
+      return NextResponse.json({ ok: false, error: "forbidden" }, { status: 403 })
+    }
 
     await supabase.storage.from("obs-audio").remove([note.storage_path])
     const { error: delErr } = await supabase.from("observation_voice_notes").delete().eq("id", id)
     if (delErr) return NextResponse.json({ ok: false, error: delErr.message }, { status: 400 })
+
     return NextResponse.json({ ok: true })
-  } catch (err: any) {
-    return NextResponse.json({ ok: false, error: err?.message || "unexpected error" }, { status: 500 })
+  } catch (err) {
+    const message = err instanceof Error ? err.message : "unexpected error"
+    return NextResponse.json({ ok: false, error: message }, { status: 500 })
   }
 }

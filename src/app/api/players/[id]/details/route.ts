@@ -1,5 +1,9 @@
+// src/app/api/players/[id]/details/route.ts
 import { NextResponse } from "next/server"
 import { createClient } from "@/lib/supabase/server"
+
+export const runtime = "nodejs"
+export const dynamic = "force-dynamic"
 
 const TM_API_BASE =
   process.env.TRANSFERMARKT_API_URL?.replace(/\/+$/, "") || "http://localhost:8000"
@@ -31,6 +35,7 @@ async function tmFetch(path: string) {
     let msg = res.statusText
     try {
       const j = await res.json()
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
       msg = (j as any)?.detail || msg
     } catch {}
     throw new Error(`TM API ${res.status}: ${msg}`)
@@ -40,25 +45,25 @@ async function tmFetch(path: string) {
 
 function parseTmIdFromUrl(u?: string | null) {
   if (!u) return null
-  // examples:
-  // https://www.transfermarkt.com/robert-lewandowski/profil/spieler/38253
-  // https://www.transfermarkt.com/player-name/profil/spieler/38253?foo=bar
+  // https://www.transfermarkt.com/player-name/profil/spieler/38253
   const m = u.match(/\/spieler\/(\d+)(?:[/?]|$)/i)
   return m ? m[1] : null
 }
 
+// ✅ Next.js 15: params is a Promise
 export async function GET(
   _req: Request,
-  { params }: { params: { id: string } }
+  ctx: { params: Promise<{ id: string }> }
 ) {
   try {
+    const { id } = await ctx.params
+
     const supabase = await createClient()
 
     // 1) Load the canonical player by UUID
     const { data: player, error } = await supabase
       .from("players")
-      .select(
-        `
+      .select(`
         id,
         full_name,
         date_of_birth,
@@ -82,9 +87,8 @@ export async function GET(
         agency,
         contract_until,
         contract_status
-      `
-      )
-      .eq("id", params.id)
+      `)
+      .eq("id", id)
       .maybeSingle()
 
     if (error) {
@@ -99,11 +103,17 @@ export async function GET(
     if (!tmId) tmId = parseTmIdFromUrl(player.transfermarkt_url)
 
     // 3) If we have a TM id, hit the local TM API concurrently
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     let profile: any = null
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     let market_value: any = null
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     let stats: any = null
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     let transfers: any = null
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     let injuries: any = null
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     let achievements: any = null
     const errors: Record<string, string> = {}
 
@@ -134,7 +144,7 @@ export async function GET(
           (e) => (errors.achievements = String(e?.message || e))
         ),
       ]).catch(() => {
-        // individual promises already record their own errors
+        // individual promises already recorded their own errors
       })
     }
 
@@ -150,10 +160,8 @@ export async function GET(
       achievements,    // TM achievements (may be null)
       _errors: Object.keys(errors).length ? errors : undefined,
     })
-  } catch (e: any) {
-    return NextResponse.json(
-      { error: e?.message || "Unexpected error" },
-      { status: 500 }
-    )
+  } catch (e: unknown) {
+    const msg = e instanceof Error ? e.message : "Unexpected error"
+    return NextResponse.json({ error: msg }, { status: 500 })
   }
 }

@@ -1,16 +1,29 @@
+// src/app/scout/players/[id]/page.tsx
 import { notFound, redirect } from "next/navigation"
 import { createClient } from "@/lib/supabase/server"
 import Client from "./Client"
 
 export const dynamic = "force-dynamic"
 
-export default async function PlayerProfilePage({ params }: { params: { id: string } }) {
+export default async function PlayerProfilePage(
+  ctx: { params: Promise<{ id: string }> }
+) {
+  const { id } = await ctx.params
+
   const supabase = await createClient()
-  const { data: { user } } = await supabase.auth.getUser()
-  if (!user) redirect(`/login?redirect_to=/scout/players/${params.id}`)
+  const {
+    data: { user },
+  } = await supabase.auth.getUser()
+
+  if (!user) {
+    redirect(`/login?redirect_to=/scout/players/${id}`)
+  }
 
   // Player core
-  const { data: player, error: playerError } = await supabase
+  const {
+    data: player,
+    error: playerError,
+  } = await supabase
     .from("players")
     .select(`
       id, full_name, first_name, last_name,
@@ -26,7 +39,7 @@ export default async function PlayerProfilePage({ params }: { params: { id: stri
       video_urls, injuries_last_3y,
       image_url, image_path
     `)
-    .eq("id", params.id)
+    .eq("id", id)
     .maybeSingle()
 
   if (playerError) throw playerError
@@ -35,8 +48,10 @@ export default async function PlayerProfilePage({ params }: { params: { id: stri
   // Observations (only current scout)
   const { data: observations } = await supabase
     .from("observations")
-    .select("id, match_date, competition, opponent, minutes_watched, notes, created_at")
-    .eq("player_id", params.id)
+    .select(
+      "id, match_date, competition, opponent, minutes_watched, notes, created_at"
+    )
+    .eq("player_id", id)
     .eq("scout_id", user.id)
     .order("match_date", { ascending: false })
 
@@ -44,7 +59,7 @@ export default async function PlayerProfilePage({ params }: { params: { id: stri
   const { data: notes } = await supabase
     .from("scout_notes")
     .select("id, category, rating, comment, created_at, updated_at")
-    .eq("player_id", params.id)
+    .eq("player_id", id)
     .eq("scout_id", user.id)
     .order("created_at", { ascending: false })
 

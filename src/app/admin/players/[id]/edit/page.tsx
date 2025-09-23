@@ -1,13 +1,20 @@
 // src/app/admin/players/[id]/edit/page.tsx
-import type { PageProps } from "next"
 import { notFound } from "next/navigation"
 import { createClient } from "@/lib/supabase/server"
 import AdminPlayerForm from "./form"
 
-export default async function AdminPlayerEdit({ params }: PageProps<{ id: string }>) {
+export const dynamic = "force-dynamic"
+
+type Params = { id: string }
+
+export default async function AdminPlayerEdit({
+  params,
+}: {
+  params: Promise<Params>
+}) {
   const { id } = await params
 
-  const supabase = createClient() // if your helper is async, use: await createClient()
+  const supabase = await createClient()
   const { data: player, error } = await supabase
     .from("players")
     .select(`
