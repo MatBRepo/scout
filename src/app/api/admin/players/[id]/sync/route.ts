@@ -91,8 +91,14 @@ export async function POST(_req: Request, { params }: { params: { id: string } }
       image_url: profile?.imageUrl ?? p.image_url ?? null,
       main_position: mapPosition(profile?.position?.main) ?? p.main_position ?? null,
       dominant_foot: profile?.foot ?? null,
-      height_cm: typeof profile?.height === "number" ? profile.height : p as any?.height_cm ?? null,
-      country_of_birth: profile?.placeOfBirth?.country ?? p as any?.country_of_birth ?? null,
+height_cm:
+  typeof profile?.height === "number"
+    ? profile.height
+    : ((p as any)?.height_cm ?? null),
+
+country_of_birth:
+  profile?.placeOfBirth?.country
+    ?? ((p as any)?.country_of_birth ?? null),
       current_club_name: profile?.club?.name || p.current_club_name || null,
       contract_until: profile?.club?.contractExpires || null,
       // keep existing DoB if we already have it; otherwise parse from description
