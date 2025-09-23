@@ -6,8 +6,8 @@ import { cookies } from "next/headers"
 export const runtime = "nodejs"
 export const dynamic = "force-dynamic"
 
-function supabaseFromCookies() {
-  const cookieStore = cookies()
+async function supabaseFromCookies() {
+  const cookieStore = await cookies() // <- await it in Next 15
   return createServerClient(
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
     process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
@@ -16,9 +16,13 @@ function supabaseFromCookies() {
         get(name: string) {
           return cookieStore.get(name)?.value
         },
-        // No-ops (the server runtime doesn't mutate request cookies)
-        set() {},
-        remove() {},
+        // These are no-ops if you never set cookies here, but keeping proper signatures is fine.
+        set(name: string, value: string, options: any) {
+          cookieStore.set({ name, value, ...options })
+        },
+        remove(name: string, options: any) {
+          cookieStore.set({ name, value: "", ...options })
+        },
       },
     }
   )
@@ -38,7 +42,7 @@ export async function PATCH(
   if (!id) return NextResponse.json({ ok: false, error: "missing id" }, { status: 400 })
 
   try {
-    const supabase = supabaseFromCookies()
+    const supabase = await supabaseFromCookies() // <- await here
 
     // auth
     const { data: auth } = await supabase.auth.getUser()
@@ -162,7 +166,7 @@ export async function DELETE(
   if (!id) return NextResponse.json({ ok: false, error: "missing id" }, { status: 400 })
 
   try {
-    const supabase = supabaseFromCookies()
+    const supabase = await supabaseFromCookies() // <- await here
     const { data: auth } = await supabase.auth.getUser()
     const user = auth?.user
     if (!user) return NextResponse.json({ ok: false, error: "not authenticated" }, { status: 401 })

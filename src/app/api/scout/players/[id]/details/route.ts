@@ -62,7 +62,7 @@ export async function GET(
 ) {
   const { id } = await ctx.params
 
-  const supabase = createClient()
+  const supabase = await createClient()
   const {
     data: { user },
   } = await supabase.auth.getUser()

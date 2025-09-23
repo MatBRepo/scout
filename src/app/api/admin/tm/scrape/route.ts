@@ -99,10 +99,11 @@ function parseEuroToInt(s?: string | null) {
   return Math.round(f * mult);
 }
 
-function extractFirstHref($td: cheerio.Cheerio<cheerio.Element>) {
+function extractFirstHref($td: cheerio.Cheerio<any>) {
   const href = $td.find("a").attr("href");
   return href || null;
 }
+
 
 // ---- Parsers ----
 

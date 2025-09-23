@@ -1,6 +1,6 @@
 // src/app/api/admin/transfermarkt/sync/route.ts
 import { NextResponse } from "next/server"
-import { createClient } from "@/lib/supabase/server"
+import createClient from "@/lib/supabase/server"   // <-- use the default export
 
 export const runtime = "nodejs"
 export const dynamic = "force-dynamic"
@@ -36,11 +36,17 @@ function pickCandidate(cands: any[], name: string, dob?: string | null) {
 }
 
 export async function POST(req: Request) {
-  const supabase = createClient()
-  const { data: { user } } = await supabase.auth.getUser()
+  const supabase = await createClient()            // <-- await here
+  const {
+    data: { user },
+  } = await supabase.auth.getUser()
   if (!user) return NextResponse.json({ error: "not_authenticated" }, { status: 401 })
 
-  const { data: me } = await supabase.from("profiles").select("role").eq("id", user.id).maybeSingle()
+  const { data: me } = await supabase
+    .from("profiles")
+    .select("role")
+    .eq("id", user.id)
+    .maybeSingle()
   if (me?.role !== "admin") return NextResponse.json({ error: "forbidden" }, { status: 403 })
 
   const url = new URL(req.url)

@@ -1,8 +1,9 @@
+// src/app/admin/scouts/invite/route.ts
 import { NextResponse } from "next/server"
 import createSSRClient from "@/lib/supabase/server"
 import { createClient as createAdminClient } from "@supabase/supabase-js"
 
-export const runtime = "nodejs" // needs Node (service key)
+export const runtime = "nodejs"
 export const dynamic = "force-dynamic"
 
 type Body = {
@@ -14,11 +15,10 @@ type Body = {
 
 export async function POST(req: Request) {
   try {
-    const ssr = createSSRClient()
+    // ✅ await the helper
+    const ssr = await createSSRClient()
     const { data: { user } } = await ssr.auth.getUser()
-    if (!user) {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
-    }
+    if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
 
     // Only admins can add users
     const { data: me } = await ssr
@@ -26,7 +26,6 @@ export async function POST(req: Request) {
       .select("role")
       .eq("id", user.id)
       .maybeSingle()
-
     if (me?.role !== "admin") {
       return NextResponse.json({ error: "Forbidden" }, { status: 403 })
     }
@@ -54,16 +53,10 @@ export async function POST(req: Request) {
       auth: { autoRefreshToken: false, persistSession: false },
     })
 
-    // 1) Send invite (magic link)
+    // Invite user
     const { data: invite, error: inviteError } =
-      await admin.auth.admin.inviteUserByEmail(email, {
-        data: { full_name },
-        // You could pass app URL redirect here if needed:
-        // redirectTo: `${process.env.NEXT_PUBLIC_SITE_URL}/auth/callback`
-      })
-
+      await admin.auth.admin.inviteUserByEmail(email, { data: { full_name } })
     if (inviteError) {
-      // 409 if already exists, etc.
       return NextResponse.json({ error: inviteError.message }, { status: 400 })
     }
     const newUser = invite.user
@@ -71,20 +64,13 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: "Invite created but no user returned" }, { status: 500 })
     }
 
-    // 2) Upsert profile with chosen role + meta
+    // Upsert profile
     const { error: upsertErr } = await admin
       .from("profiles")
       .upsert(
-        {
-          id: newUser.id,
-          full_name: full_name || null,
-          role,
-          is_active,
-          // Optional: copy some metadata (agency/country) here if you add fields to the form
-        },
+        { id: newUser.id, full_name: full_name || null, role, is_active },
         { onConflict: "id" }
       )
-
     if (upsertErr) {
       return NextResponse.json({ error: upsertErr.message }, { status: 500 })
     }

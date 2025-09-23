@@ -198,8 +198,8 @@ export async function GET(req: NextRequest) {
   })
 
   // Upsert
-  const supabase = createClient()
-  if (players.length) {
+  const supabase = await createClient()
+if (players.length) {
     const { error } = await supabase
       .from("tm_squad_players")
       .upsert(players, { onConflict: "season_id,tm_club_id,tm_player_id" })

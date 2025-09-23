@@ -3,8 +3,10 @@ import createClient from "@/lib/supabase/server"
 import ScoutsTable from "./_components/ScoutsTable"
 
 export default async function AdminScoutsPage() {
-  const supabase = createClient() // sync; no await
-  const { data: { user } } = await supabase.auth.getUser()
+  const supabase = await createClient() // ✅ await the async helper
+  const {
+    data: { user },
+  } = await supabase.auth.getUser()
   if (!user) redirect("/")
 
   const { data: me } = await supabase

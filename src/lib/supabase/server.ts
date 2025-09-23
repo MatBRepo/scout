@@ -4,8 +4,8 @@ import { createServerClient, type CookieOptions } from "@supabase/ssr"
 import type { SupabaseClient } from "@supabase/supabase-js"
 // import type { Database } from "@/lib/supabase/types"
 
-export function createClient(/* cookie scope optional */): SupabaseClient /* <Database> */ {
-  const cookieStore = cookies()
+export async function createClient(/* cookie scope optional */): Promise<SupabaseClient /* <Database> */> {
+  const cookieStore = await cookies()
 
   return createServerClient(
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -27,11 +27,11 @@ export function createClient(/* cookie scope optional */): SupabaseClient /* <Da
           try {
             cookieStore.set({ name, value: "", ...options })
           } catch {
-            // no-op in RSC
           }
         },
       },
     }
   )
 }
+
 export default createClient

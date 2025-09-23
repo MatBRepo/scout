@@ -1,6 +1,8 @@
 // src/app/scout/observations/[id]/players/[rowId]/route.ts
 import { NextResponse } from "next/server"
 import { createClient } from "@/lib/supabase/server"
+import type { SupabaseClient } from "@supabase/supabase-js" // add this
+
 
 export const dynamic = "force-dynamic"
 
@@ -9,7 +11,7 @@ type GuardResult =
   | { ok: false; status: number; error: string }
 
 async function assertOwner(
-  supabase: ReturnType<typeof createClient>,
+  supabase: SupabaseClient,
   rowId: string,
   userId: string
 ): Promise<GuardResult> {
