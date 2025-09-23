@@ -226,164 +226,191 @@ export default function ScoutsTable() {
     }
   }
 
-  // -------- INSIGHTS LOADER (fetches everything needed) --------
-  const openInsights = async (scout: Scout) => {
-    setCurrentScout(scout)
-    setInsightsOpen(true)
-    setInsightsBusy(true)
-    try {
-      const scoutId = scout.id
+// -------- INSIGHTS LOADER (fetches everything needed) --------
+const openInsights = async (scout: Scout) => {
+  setCurrentScout(scout)
+  setInsightsOpen(true)
+  setInsightsBusy(true)
+  try {
+    const scoutId = scout.id
 
-      // 1) Profile/contact
-      const profileQ = supabase
-        .from("profiles")
-        .select("phone, whatsapp, agency, country")
-        .eq("id", scoutId)
-        .maybeSingle()
+    // 1) Profile/contact
+    const profileQ = supabase
+      .from("profiles")
+      .select("phone, whatsapp, agency, country")
+      .eq("id", scoutId)
+      .maybeSingle()
 
-      // 2) Notes (with player)
-      const notesQ = supabase
-        .from("scout_notes")
-        .select("category, rating, comment, created_at, players(id, full_name, image_url)")
-        .eq("scout_id", scoutId)
-        .order("created_at", { ascending: false })
-        .limit(400)
+    // 2) Notes (with player)
+    const notesQ = supabase
+      .from("scout_notes")
+      .select("category, rating, comment, created_at, players(id, full_name, image_url)")
+      .eq("scout_id", scoutId)
+      .order("created_at", { ascending: false })
+      .limit(400)
 
-      // 3) Canonical players created by this scout
-      const createdPlayersQ = supabase
-        .from("players")
-        .select("id, full_name, image_url, main_position, current_club_name")
-        .eq("created_by", scoutId)
-        .order("created_at", { ascending: false })
-        .limit(24)
+    // 3) Canonical players created by this scout
+    const createdPlayersQ = supabase
+      .from("players")
+      .select("id, full_name, image_url, main_position, current_club_name")
+      .eq("created_by", scoutId)
+      .order("created_at", { ascending: false })
+      .limit(24)
 
-      // 4) Player ENTRIES created by this scout  ✅
-      const createdEntriesQ = supabase
-        .from("scout_player_entries")
-        .select("id, full_name, image_url, main_position, current_club_name")
-        .eq("scout_id", scoutId)
-        .order("created_at", { ascending: false })
-        .limit(24)
+    // 4) Player ENTRIES created by this scout
+    const createdEntriesQ = supabase
+      .from("scout_player_entries")
+      .select("id, full_name, image_url, main_position, current_club_name")
+      .eq("scout_id", scoutId)
+      .order("created_at", { ascending: false })
+      .limit(24)
 
-      // 5) My players (assignment table)
-      const myPlayersQ = supabase
-        .from("players_scouts")
-        .select("player_id, players(id, full_name, image_url, main_position, current_club_name)")
-        .eq("scout_id", scoutId)
-        .order("created_at", { ascending: false })
-        .limit(24)
+    // 5) My players (assignment table)
+    const myPlayersQ = supabase
+      .from("players_scouts")
+      .select("player_id, players(id, full_name, image_url, main_position, current_club_name)")
+      .eq("scout_id", scoutId)
+      .order("created_at", { ascending: false })
+      .limit(24)
 
-      // 6) Sessions
-      const sessionsQ = supabase
-        .from("observation_sessions")
-        .select("id, title, match_date, competition, opponent")
-        .eq("scout_id", scoutId)
-        .order("match_date", { ascending: false })
-        .limit(15)
+    // 6) Sessions
+    const sessionsQ = supabase
+      .from("observation_sessions")
+      .select("id, title, match_date, competition, opponent")
+      .eq("scout_id", scoutId)
+      .order("match_date", { ascending: false })
+      .limit(15)
 
-      // 7) Potential rating avg (evaluations)
-      const evalQ = supabase
-        .from("evaluations")
-        .select("potential_rating")
-        .eq("scout_id", scoutId)
-        .not("potential_rating", "is", null)
-        .limit(600)
+    // 7) Potential rating avg (evaluations)
+    const evalQ = supabase
+      .from("evaluations")
+      .select("potential_rating")
+      .eq("scout_id", scoutId)
+      .not("potential_rating", "is", null)
+      .limit(600)
 
-      const [
-        { data: prof },
-        { data: notesRows },
-        { data: createdPlayers },
-        { data: createdEntries },
-        { data: myPlayersRows },
-        { data: sessionsRows },
-        { data: evalRows },
-      ] = await Promise.all([profileQ, notesQ, createdPlayersQ, createdEntriesQ, myPlayersQ, sessionsQ, evalQ])
+    const [
+      { data: prof },
+      { data: notesRows },
+      { data: createdPlayers },
+      { data: createdEntries },
+      { data: myPlayersRows },
+      { data: sessionsRows },
+      { data: evalRows },
+    ] = await Promise.all([profileQ, notesQ, createdPlayersQ, createdEntriesQ, myPlayersQ, sessionsQ, evalQ])
 
-      setProfile(prof || null)
-      setNotes((notesRows || []) as NoteRow[])
+    setProfile(prof || null)
 
-      // averages
-      const ratings: number[] = []
-      const catAgg: Record<string, { sum: number; count: number }> = {}
-      ;(notesRows || []).forEach((n: any) => {
-        const r = Number(n.rating)
-        if (Number.isFinite(r) && r > 0) {
-          ratings.push(r)
-          const k = n.category as string
-          if (!catAgg[k]) catAgg[k] = { sum: 0, count: 0 }
-          catAgg[k].sum += r
-          catAgg[k].count += 1
-        }
-      })
-      const round1 = (x: number) => Math.round(x * 10) / 10
-      setOverallAvg(ratings.length ? round1(ratings.reduce((a, b) => a + b, 0) / ratings.length) : null)
-      const byCat: Record<string, { avg: number; count: number }> = {}
-      Object.entries(catAgg).forEach(([k, v]) => (byCat[k] = { avg: round1(v.sum / v.count), count: v.count }))
-      setAvgByCat(byCat)
+    // 🔧 Normalize notes shape to match NoteRow (players is a single object, not an array)
+    const normalizedNotes: NoteRow[] = ((notesRows ?? []) as any[]).map((n) => {
+      const raw = n?.players
+      const one =
+        raw == null
+          ? null
+          : Array.isArray(raw)
+          ? raw[0] ?? null
+          : raw
 
-      // players lists
-      setPlayersAdded(
-        (createdPlayers || []).map((p: any) => ({
-          id: p.id,
-          full_name: p.full_name,
-          image_url: p.image_url,
-          main_position: p.main_position,
-          current_club_name: p.current_club_name,
-        }))
-      )
-
-      setEntriesAdded(
-        (createdEntries || []).map((p: any) => ({
-          id: p.id,
-          full_name: p.full_name,
-          image_url: p.image_url,
-          main_position: p.main_position,
-          current_club_name: p.current_club_name,
-        }))
-      )
-
-      setMyPlayers(
-        (myPlayersRows || [])
-          .map((r: any) => ({
-            id: r.players?.id,
-            full_name: r.players?.full_name,
-            image_url: r.players?.image_url,
-            main_position: r.players?.main_position,
-            current_club_name: r.players?.current_club_name,
-          }))
-          .filter((p: any) => p.id)
-      )
-
-      // sessions + players_count
-      const sess = (sessionsRows as any) || []
-      if (sess.length) {
-        const { data: members } = await supabase
-          .from("observation_players")
-          .select("observation_id")
-          .in("observation_id", sess.map((s: any) => s.id))
-
-        const counts: Record<string, number> = {}
-        ;(members || []).forEach((m: any) => {
-          counts[m.observation_id] = (counts[m.observation_id] || 0) + 1
-        })
-        setSessions(sess.map((s: any) => ({ ...s, players_count: counts[s.id] || 0 })))
-      } else {
-        setSessions([])
+      return {
+        category: String(n?.category ?? ""),
+        rating: n?.rating != null ? Number(n.rating) : null,
+        comment: n?.comment ?? null,
+        created_at: String(n?.created_at ?? ""),
+        players: one
+          ? {
+              id: String(one.id),
+              full_name: String(one.full_name),
+              image_url: one.image_url ?? null,
+            }
+          : null,
       }
+    })
 
-      // potential avg
-      const potentials = (evalRows || [])
-        .map((e: any) => Number(e.potential_rating))
-        .filter((n) => Number.isFinite(n) && n > 0)
+    setNotes(normalizedNotes)
 
-      setPotentialAvg(potentials.length ? round1(potentials.reduce((a, b) => a + b, 0) / potentials.length) : null)
-    } catch (e: any) {
-      console.error(e)
-      toast.error(e?.message || "Failed to load insights")
-    } finally {
-      setInsightsBusy(false)
+    // averages
+    const ratings: number[] = []
+    const catAgg: Record<string, { sum: number; count: number }> = {}
+    normalizedNotes.forEach((n) => {
+      const r = Number(n.rating)
+      if (Number.isFinite(r) && r > 0) {
+        ratings.push(r)
+        const k = n.category
+        if (!catAgg[k]) catAgg[k] = { sum: 0, count: 0 }
+        catAgg[k].sum += r
+        catAgg[k].count += 1
+      }
+    })
+    const round1 = (x: number) => Math.round(x * 10) / 10
+    setOverallAvg(ratings.length ? round1(ratings.reduce((a, b) => a + b, 0) / ratings.length) : null)
+    const byCat: Record<string, { avg: number; count: number }> = {}
+    Object.entries(catAgg).forEach(([k, v]) => (byCat[k] = { avg: round1(v.sum / v.count), count: v.count }))
+    setAvgByCat(byCat)
+
+    // players lists
+    setPlayersAdded(
+      (createdPlayers || []).map((p: any) => ({
+        id: p.id,
+        full_name: p.full_name,
+        image_url: p.image_url,
+        main_position: p.main_position,
+        current_club_name: p.current_club_name,
+      }))
+    )
+
+    setEntriesAdded(
+      (createdEntries || []).map((p: any) => ({
+        id: p.id,
+        full_name: p.full_name,
+        image_url: p.image_url,
+        main_position: p.main_position,
+        current_club_name: p.current_club_name,
+      }))
+    )
+
+    setMyPlayers(
+      (myPlayersRows || [])
+        .map((r: any) => ({
+          id: r.players?.id,
+          full_name: r.players?.full_name,
+          image_url: r.players?.image_url,
+          main_position: r.players?.main_position,
+          current_club_name: r.players?.current_club_name,
+        }))
+        .filter((p: any) => p.id)
+    )
+
+    // sessions + players_count
+    const sess = (sessionsRows as any) || []
+    if (sess.length) {
+      const { data: members } = await supabase
+        .from("observation_players")
+        .select("observation_id")
+        .in("observation_id", sess.map((s: any) => s.id))
+
+      const counts: Record<string, number> = {}
+      ;(members || []).forEach((m: any) => {
+        counts[m.observation_id] = (counts[m.observation_id] || 0) + 1
+      })
+      setSessions(sess.map((s: any) => ({ ...s, players_count: counts[s.id] || 0 })))
+    } else {
+      setSessions([])
     }
+
+    // potential avg
+    const potentials = (evalRows || [])
+      .map((e: any) => Number(e.potential_rating))
+      .filter((n) => Number.isFinite(n) && n > 0)
+
+    setPotentialAvg(potentials.length ? round1(potentials.reduce((a, b) => a + b, 0) / potentials.length) : null)
+  } catch (e: any) {
+    console.error(e)
+    toast.error(e?.message || "Failed to load insights")
+  } finally {
+    setInsightsBusy(false)
   }
+}
+
 
   return (
     <div className="space-y-4">

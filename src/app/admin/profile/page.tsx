@@ -6,14 +6,16 @@ import { Card } from "@/components/ui/card"
 export type Profile = { id: string; full_name: string | null; avatar_url: string | null }
 
 async function getInitialData() {
-  const supabase = createClient()
+  const supabase = await createClient(); // 👈 await here
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) return { email: null, profile: null }
+
   const { data: profile } = await supabase
     .from("profiles")
     .select("id, full_name, avatar_url")
     .eq("id", user.id)
     .single()
+
   return { email: user.email, profile: (profile as Profile) ?? null }
 }
 
