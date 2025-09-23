@@ -29,27 +29,20 @@ const { data, error } = await supabase
   .from("players_scouts")
   .select(`
     player_id,
-    players(
-      id,
-      full_name,
-      main_position,
-      current_club_name,
-      current_club_country,
-      image_url,
-      transfermarkt_url
+    players:players!players_scouts_player_id_fkey (
+      id, full_name, main_position, current_club_name, current_club_country, image_url, transfermarkt_url
     )
   `)
   .eq("scout_id", user.id)
   .order("created_at", { ascending: false })
+
 
 if (error) {
   return <div className="p-4 md:p-8 text-sm text-red-600">Error: {error.message}</div>
 }
 
 // pick the first related player row and drop empties
-const rows: Row[] = ((data ?? []) as DbRow[])
-  .map(r => r.players?.[0])
-  .filter((p): p is Row => Boolean(p))
+const rows: Row[] = (data ?? []).map((r: any) => r.players?.[0]).filter(Boolean)
 
 
   return (

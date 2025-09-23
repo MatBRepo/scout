@@ -76,7 +76,31 @@ export default function MyPlayersClient({ rows }: { rows: Row[] }) {
 
   // Live players list
   const [localItems, setLocalItems] = useState<Row[]>(rows ?? [])
-  useEffect(() => setLocalItems(rows ?? []), [rows])
+  useEffect(() => {
+  if (localItems.length) return; // SSR already provided rows
+  let mounted = true;
+  (async () => {
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) return;
+    const { data: links } = await supabase
+      .from("players_scouts")
+      .select("player_id, created_at")
+      .eq("scout_id", user.id)
+      .order("created_at", { ascending: false });
+    const ids = (links ?? []).map(l => l.player_id);
+    if (!ids.length) return;
+    const { data: players } = await supabase
+      .from("players")
+      .select("id, full_name, main_position, current_club_name, current_club_country, image_url, transfermarkt_url")
+      .in("id", ids);
+    if (!mounted) return;
+    const byId = new Map((players ?? []).map(p => [p.id, p]));
+    setLocalItems(ids.map(id => byId.get(id)).filter(Boolean) as Row[]);
+  })();
+  return () => { mounted = false };
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+}, []);
+
 
   // Sessions
   const [sessions, setSessions] = useState<Session[]>([])
