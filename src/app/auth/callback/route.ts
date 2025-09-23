@@ -7,7 +7,7 @@ export async function GET(request: Request) {
   const code = searchParams.get("code")
   const next = searchParams.get("next") ?? "/admin"
   if (code) {
-    const supabase = createClient()
+    const supabase = await createClient()
     await supabase.auth.exchangeCodeForSession(code)
   }
   return NextResponse.redirect(new URL(next, request.url))
