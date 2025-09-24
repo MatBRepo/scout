@@ -26,6 +26,7 @@ import {
   DropdownMenuSeparator,
 } from "@/components/ui/dropdown-menu"
 import { Button } from "@/components/ui/button"
+import SettingsDialog from "@/components/settings/SettingsDialog"
 
 // Roles supported in UI and DB
 type Role = "scout" | "scout_agent" | "admin"
@@ -197,6 +198,7 @@ function AccountDropdown({
   avatarUrl,
   role,
   canDiscover,
+  onOpenSettings,
 }: {
   collapsed: boolean
   loading: boolean
@@ -205,6 +207,7 @@ function AccountDropdown({
   avatarUrl: string | null
   role: Role | null
   canDiscover: boolean
+  onOpenSettings?: () => void
 }) {
   const initials =
     (fullName?.trim()?.split(/\s+/).slice(0, 2).map(s => s[0]?.toUpperCase()).join("") ||
@@ -282,11 +285,13 @@ function AccountDropdown({
         )}
 
         <DropdownMenuSeparator />
-        <DropdownMenuItem asChild>
-          <Link href="/settings" className="flex items-center gap-2">
-            <Settings className="h-4 w-4" />
-            Settings
-          </Link>
+        {/* Open dialog instead of navigating to /settings */}
+        <DropdownMenuItem
+          onSelect={(e) => { e.preventDefault(); onOpenSettings?.() }}
+          className="cursor-pointer"
+        >
+          <Settings className="mr-2 h-4 w-4" />
+          Settings
         </DropdownMenuItem>
 
         <DropdownMenuSeparator />
@@ -307,6 +312,7 @@ export function AppSidebar() {
   const [role, setRole] = useState<Role | null>(null)
   const [collapsed, setCollapsed] = useState<boolean>(false)
   const [mobileOpen, setMobileOpen] = useState(false)
+  const [settingsOpen, setSettingsOpen] = useState(false)
 
   // Account info
   const [loadingAcct, setLoadingAcct] = useState(true)
@@ -443,6 +449,11 @@ export function AppSidebar() {
           avatarUrl={avatarUrl}
           role={role}
           canDiscover={canDiscover}
+          onOpenSettings={() => {
+            setSettingsOpen(true)
+            // optionally close the mobile drawer when opening settings:
+            setMobileOpen(false)
+          }}
         />
       </div>
       {!collapsed && <div className="mt-2"><ThemeToggle className="w-full justify-center" /></div>}
@@ -512,6 +523,9 @@ export function AppSidebar() {
           </div>
         </div>
       )}
+
+      {/* Settings popup */}
+      <SettingsDialog open={settingsOpen} onOpenChange={setSettingsOpen} />
     </>
   )
 }
