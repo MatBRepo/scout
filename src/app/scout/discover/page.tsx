@@ -616,9 +616,16 @@ export default function DiscoverPlayersPage() {
               ...(search ? [{ label: t("discover.chips.search", {q: search}), clear: () => setSearch("") }] : []),
               ...(position !== "any" ? [{ label: t("discover.chips.position", {pos: position}), clear: () => setPosition("any") }] : []),
               ...(country ? [{ label: t("discover.chips.country", {country}), clear: () => setCountry("") }] : []),
-              ...(sort !== "newest" ? [{ label: t("discover.chips.sort", {
-                sort: sort === "newest" ? t("discover.sort.newest") : sort === "name" ? t("discover.sort.name") : t("discover.sort.interest")
-              }), clear: () => setSort("newest") }] : []),
+...(sort !== "newest"
+  ? [{
+      label: t("discover.chips.sort", {
+        sort: sort === "name"
+          ? t("discover.sort.name")
+          : t("discover.sort.interest")
+      }),
+      clear: () => setSort("newest")
+    }]
+  : []),
             ].map((f) => (
               <Badge key={f.label} variant="secondary" className="flex items-center gap-1">
                 {f.label}

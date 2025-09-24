@@ -6,6 +6,7 @@ import Image from 'next/image'
 
 import {Link, usePathname, getPathname} from '@/i18n/navigation'
 import {useTranslations, useLocale} from 'next-intl'
+import {routing, isLocale, type Locale} from '@/i18n/routing'
 
 import {createClient} from '@/lib/supabase/browser'
 import {cn} from '@/lib/utils'
@@ -87,16 +88,15 @@ function NavItem({
   collapsed?: boolean
 }) {
   const pathname = usePathname()
-  const locale = useLocale()
-  useEffect(() => {
-  console.log('locale =', locale)
-}, [locale])
+  const raw = useLocale()
+  const locale: Locale = isLocale(raw) ? raw : routing.defaultLocale
+
   const localizedHref = getPathname({href, locale})
   const active = pathname === localizedHref || pathname.startsWith(localizedHref + '/')
 
   return (
     <Link
-      href={href}
+      href={href} // unprefixed; Link will inject /en or /pl
       onClick={onClick}
       className={cn(
         'group flex items-center gap-2 rounded-xl px-3 py-2 text-sm transition',
@@ -183,13 +183,17 @@ function NotificationsDropdown({
             {r.href ? (
               <Link href={r.href} className="w-full">
                 <div className="flex flex-col">
-                <span className="text-sm">{t('recent.observation', {title: r.title || t('misc.untitled')})}</span>
+                  <span className="text-sm">
+                    {t('recent.observation', {title: r.title || t('ui.na')})}
+                  </span>
                   {r.ts && <span className="text-[11px] text-muted-foreground">{r.ts}</span>}
                 </div>
               </Link>
             ) : (
               <div className="flex flex-col">
-               <span className="text-sm">{t('recent.observation', {title: r.title || t('misc.untitled')})}</span>
+                <span className="text-sm">
+                  {t('recent.observation', {title: r.title || t('ui.na')})}
+                </span>
                 {r.ts && <span className="text-[11px] text-muted-foreground">{r.ts}</span>}
               </div>
             )}
@@ -491,7 +495,7 @@ export function AppSidebar() {
                 <p className="text-xs text-muted-foreground">{t('brand.subtitle')}</p>
               </div>
             )}
-            {/* removed top LanguageToggle & ThemeToggle */}
+            {/* top toggles removed */}
           </div>
 
           {ScoutBlock}
@@ -520,7 +524,7 @@ export function AppSidebar() {
                   <X className="h-5 w-5" />
                 </button>
               </div>
-              {/* removed top toggles from mobile header */}
+              {/* top toggles removed in mobile header */}
               <Divider />
               {ScoutBlock}
               {AdminBlock}
