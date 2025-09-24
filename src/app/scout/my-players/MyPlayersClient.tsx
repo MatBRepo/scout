@@ -19,8 +19,8 @@ import {
 } from "@/components/ui/table"
 
 import {
-  ExternalLink, Users, PlusCircle, Loader2, CheckCircle2, FileText, Mic, Filter,
-  SortAsc, SortDesc, Trash2, LayoutGrid, Rows, RotateCcw, X, Trash
+  ExternalLink, PlusCircle, Loader2, CheckCircle2, FileText, Mic, Filter,
+  SortAsc, SortDesc, Trash2, LayoutGrid, Rows, RotateCcw, Trash
 } from "lucide-react"
 
 type Session = { id: string; title: string | null; match_date: string }
@@ -76,7 +76,7 @@ export default function MyPlayersClient({ rows }: { rows: Row[] }) {
 
   // Live players list
   const [localItems, setLocalItems] = useState<Row[]>(rows ?? [])
-  const [loadingPlayers, setLoadingPlayers] = useState(!(rows && rows.length)) // NEW: loader for players
+  const [loadingPlayers, setLoadingPlayers] = useState(!(rows && rows.length))
 
   useEffect(() => {
     if (localItems.length) { setLoadingPlayers(false); return } // SSR provided rows
@@ -126,6 +126,7 @@ export default function MyPlayersClient({ rows }: { rows: Row[] }) {
   // Trash (persistent if table exists, otherwise localStorage)
   const [trashSupported, setTrashSupported] = useState<boolean>(true)
   const [trash, setTrash] = useState<TrashItem[]>([])
+  const [showTrash, setShowTrash] = useState<boolean>(true)
 
   // Notes/voices
   const [notesByPlayer, setNotesByPlayer] = useState<Record<string, NoteAgg>>({})
@@ -136,7 +137,15 @@ export default function MyPlayersClient({ rows }: { rows: Row[] }) {
   const [sortKey, setSortKey] = useState<SortKey>("recent")
   const [sortDir, setSortDir] = useState<"asc" | "desc">("desc")
   const [onlyWithNotes, setOnlyWithNotes] = useState(false)
-  const [view, setView] = useState<ViewMode>("table") // DEFAULT: table
+  const [view, setView] = useState<ViewMode>("table") // will flip to "grid" on mount for small screens
+
+  // On mount: prefer cards on phones + collapse trash on phones
+  useEffect(() => {
+    if (typeof window !== "undefined" && window.matchMedia("(max-width: 767px)").matches) {
+      setView("grid")
+      setShowTrash(false)
+    }
+  }, [])
 
   /* ---------- helpers for localStorage fallback ---------- */
   const lsKey = (uid: string) => `my_players_trash_${uid}`
@@ -565,20 +574,33 @@ export default function MyPlayersClient({ rows }: { rows: Row[] }) {
       <div className="flex flex-col gap-3 md:flex-row md:items-end md:justify-between">
         <div>
           <div className="flex items-center gap-2">
-            <h1 className="text-2xl font-semibold">My Players</h1>
+            <h1 className="text-2xl font-semibold pb-2 md:pb-4">My Players</h1>
             {loadingPlayers && <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" aria-label="Loading players" />}
           </div>
-          <div className="mt-1 flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
-            <Badge variant="secondary">Players: {headerStats.totalPlayers}</Badge>
-            <Badge variant="outline" className="gap-1"><FileText className="h-3 w-3" /> Notes: {headerStats.totalNotes}</Badge>
-            <Badge variant="outline" className="gap-1"><Mic className="h-3 w-3" /> Voice: {headerStats.totalVoices}</Badge>
-            <Badge variant="outline">Avg: {headerStats.overallAvg ?? "—"}/10</Badge>
-            <Badge variant="outline" className="gap-1"><Trash className="h-3 w-3" /> Trash: {trash.length}</Badge>
+
+          {/* counters as scrollable chips on mobile */}
+          <div className="mt-1 -mx-1 overflow-x-auto md:mx-0 md:overflow-visible">
+            <div
+              className="flex w-full min-w-0 gap-2 px-1 pb-1 text-xs text-muted-foreground
+                         md:flex-wrap md:px-0 md:pb-0
+                         [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
+            >
+              <Badge variant="secondary" className="shrink-0">Players: {headerStats.totalPlayers}</Badge>
+              <Badge variant="outline" className="shrink-0 gap-1"><FileText className="h-3 w-3" /> {headerStats.totalNotes}</Badge>
+              <Badge variant="outline" className="shrink-0 gap-1"><Mic className="h-3 w-3" /> {headerStats.totalVoices}</Badge>
+              <Badge variant="outline" className="shrink-0">Avg: {headerStats.overallAvg ?? "—"}/10</Badge>
+              <Badge variant="outline" className="shrink-0 gap-1"><Trash className="h-3 w-3" /> {trash.length}</Badge>
+            </div>
           </div>
         </div>
 
-        {/* Filters + view */}
-        <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
+        {/* Filters + view (sticky on mobile) */}
+        <div
+          className="md:static sticky top-[calc(env(safe-area-inset-top)+4px)] z-30
+                     rounded-xl border bg-background/80 backdrop-blur px-2 py-2
+                     md:border-0 md:bg-transparent md:backdrop-blur-0 md:px-0 md:py-0
+                     flex flex-col gap-2 sm:flex-row sm:items-center"
+        >
           <Input
             placeholder="Search by name, club, position…"
             value={search}
@@ -593,6 +615,7 @@ export default function MyPlayersClient({ rows }: { rows: Row[] }) {
               size="sm"
               onClick={() => setOnlyWithNotes(v => !v)}
               title="Toggle only players with notes"
+              className="h-9 md:h-8"
             >
               <Filter className="mr-1 h-4 w-4" />
               {onlyWithNotes ? "With notes" : "All"}
@@ -605,7 +628,7 @@ export default function MyPlayersClient({ rows }: { rows: Row[] }) {
                 setSortKey(k); setSortDir(d)
               }}
             >
-              <SelectTrigger className="h-9 w-[180px]"><SelectValue placeholder="Sort by" /></SelectTrigger>
+              <SelectTrigger className="h-9 md:h-8 w-[180px]"><SelectValue placeholder="Sort by" /></SelectTrigger>
               <SelectContent>
                 <SelectItem value="recent:desc">Recent notes (newest)</SelectItem>
                 <SelectItem value="recent:asc">Recent notes (oldest)</SelectItem>
@@ -620,10 +643,20 @@ export default function MyPlayersClient({ rows }: { rows: Row[] }) {
             {sortDir === "asc" ? <SortAsc className="h-4 w-4 text-muted-foreground" /> : <SortDesc className="h-4 w-4 text-muted-foreground" />}
 
             <div className="ml-2 inline-flex rounded-md border p-1">
-              <Button size="sm" variant={view === "grid" ? "secondary" : "ghost"} className="gap-1" onClick={() => setView("grid")}>
+              <Button
+                size="sm"
+                variant={view === "grid" ? "secondary" : "ghost"}
+                className="gap-1 h-9 md:h-8 px-3"
+                onClick={() => setView("grid")}
+              >
                 <LayoutGrid className="h-4 w-4" /> Cards
               </Button>
-              <Button size="sm" variant={view === "table" ? "secondary" : "ghost"} className="gap-1" onClick={() => setView("table")}>
+              <Button
+                size="sm"
+                variant={view === "table" ? "secondary" : "ghost"}
+                className="gap-1 h-9 md:h-8 px-3"
+                onClick={() => setView("table")}
+              >
                 <Rows className="h-4 w-4" /> Table
               </Button>
             </div>
@@ -631,8 +664,21 @@ export default function MyPlayersClient({ rows }: { rows: Row[] }) {
         </div>
       </div>
 
-      {/* Trash panel */}
+      {/* Trash toggle on mobile */}
       {!!trash.length && (
+        <div className="flex items-center justify-between md:hidden">
+          <div className="text-sm font-medium flex items-center gap-2">
+            <Trash className="h-4 w-4" /> Trash ({trash.length})
+            {!trashSupported && <span className="text-xs text-muted-foreground">(local only)</span>}
+          </div>
+          <Button size="sm" variant="outline" onClick={() => setShowTrash(v => !v)}>
+            {showTrash ? <>Hide</> : <>Show</>}
+          </Button>
+        </div>
+      )}
+
+      {/* Trash panel */}
+      {!!trash.length && showTrash && (
         <Card className="rounded-2xl p-4">
           <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
             <div className="text-sm font-medium flex items-center gap-2">
@@ -646,7 +692,7 @@ export default function MyPlayersClient({ rows }: { rows: Row[] }) {
             </div>
           </div>
 
-          <div className="mt-3 grid gap-2 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
+          <div className="mt-3 grid gap-2 grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
             {trash.map((t) => {
               const snap = t.snapshot
               return (
@@ -692,8 +738,11 @@ export default function MyPlayersClient({ rows }: { rows: Row[] }) {
 
       {/* TABLE VIEW */}
       {view === "table" && (
-        <div className="w-full overflow-x-auto rounded-2xl border shadow-sm">
-          <Table>
+        <div
+          className="w-full overflow-x-auto rounded-2xl border shadow-sm
+                     [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
+        >
+          <Table className="text-[13px] md:text-sm">
             <TableHeader>
               <TableRow className="whitespace-nowrap">
                 <TableHead className="min-w-[240px] sm:min-w-[320px] sticky left-0 bg-background z-10">Player</TableHead>
@@ -748,7 +797,9 @@ export default function MyPlayersClient({ rows }: { rows: Row[] }) {
                   <TableRow key={p.id} className="align-top">
                     <TableCell className="sticky left-0 bg-background z-10">
                       <div className="flex items-start gap-3">
-                        <PlayerAvatar src={p.image_url} alt={p.full_name} />
+                        <div className="md:shrink-0">
+                          <PlayerAvatar src={p.image_url} alt={p.full_name} />
+                        </div>
                         <div className="min-w-0">
                           <div className="truncate font-medium">{p.full_name}</div>
                           <div className="truncate text-[11px] text-muted-foreground">
@@ -762,7 +813,7 @@ export default function MyPlayersClient({ rows }: { rows: Row[] }) {
                               onValueChange={(id) => setSelectedSession(p.id, id)}
                               disabled={loadingSessions || adding}
                             >
-                              <SelectTrigger className="h-9 w-full">
+                              <SelectTrigger className="h-11 md:h-9 w-full">
                                 <SelectValue placeholder={loadingSessions ? "Loading…" : "Choose session…"} />
                               </SelectTrigger>
                               <SelectContent>
@@ -784,7 +835,7 @@ export default function MyPlayersClient({ rows }: { rows: Row[] }) {
                             )}
                             <Button
                               size="sm"
-                              className="w-full"
+                              className="w-full h-11 md:h-9"
                               onClick={() => addToObservation(p.id)}
                               disabled={adding || existsInSelected || !selectedSession}
                             >
@@ -841,13 +892,6 @@ export default function MyPlayersClient({ rows }: { rows: Row[] }) {
                     <TableCell>
                       <div className="flex flex-wrap items-center gap-2">
                         <Button asChild size="sm"><Link href={`/scout/players/${p.id}`}>Open</Link></Button>
-                        {p.transfermarkt_url && (
-                          <Button asChild size="sm" variant="outline" className="hidden sm:inline-flex">
-                            <a href={p.transfermarkt_url} target="_blank" rel="noreferrer">
-                              TM <ExternalLink className="ml-1 h-3 w-3" />
-                            </a>
-                          </Button>
-                        )}
                         <Button
                           size="sm"
                           variant="destructive"
@@ -867,13 +911,13 @@ export default function MyPlayersClient({ rows }: { rows: Row[] }) {
         </div>
       )}
 
-      {/* GRID VIEW (unchanged, but remains super mobile-friendly) */}
+      {/* GRID VIEW (mobile-first) */}
       {view === "grid" && (
         <>
           {/* Mobile rail */}
           <div className="md:hidden">
-            <div className="overflow-x-auto pb-3" role="region" aria-label="My Players horizontal list">
-              <div className="flex snap-x snap-mandatory gap-4">
+            <div className="overflow-x-auto pb-3 -mx-2 px-2" role="region" aria-label="My Players horizontal list">
+              <div className="flex snap-x snap-mandatory gap-3 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
                 {filteredSorted.map((p) => (
                   <PlayerCard
                     key={p.id}
@@ -889,7 +933,7 @@ export default function MyPlayersClient({ rows }: { rows: Row[] }) {
                     voicesCount={voicesByPlayer[p.id] || 0}
                     onRemove={() => removeFromMyPlayers(p.id)}
                     removing={!!removingByPlayer[p.id]}
-                    className="min-w-[85vw] max-w-[85vw] snap-start"
+                    className="min-w-[88vw] max-w-[88vw] snap-start"
                   />
                 ))}
               </div>
@@ -973,7 +1017,7 @@ function PlayerCard({
           <Button
             variant="destructive"
             size="icon"
-            className="h-8 w-8"
+            className="h-10 w-10 md:h-8 md:w-8"
             onClick={onRemove}
             disabled={removing}
             title="Move to Trash"
@@ -1002,20 +1046,9 @@ function PlayerCard({
           </div>
         )}
 
-        <div className="mt-3 grid grid-cols-1 gap-2 sm:grid-cols-2">
-          <Button asChild size="sm" className="w-full"><Link href={`/scout/players/${p.id}`}>Open profile</Link></Button>
-          {p.transfermarkt_url && (
-            <Button asChild size="sm" variant="outline" className="w-full">
-              <a href={p.transfermarkt_url} target="_blank" rel="noreferrer">
-                Transfermarkt <ExternalLink className="ml-1 h-3 w-3" />
-              </a>
-            </Button>
-          )}
-        </div>
-
         <div className="mt-3 flex flex-col gap-2">
           <Select value={selectedSession} onValueChange={onSelectSession} disabled={loadingSessions || adding}>
-            <SelectTrigger className="h-9 w-full">
+            <SelectTrigger className="h-11 md:h-9 w-full">
               <SelectValue placeholder={loadingSessions ? "Loading sessions…" : "Choose observation session…"} />
             </SelectTrigger>
             <SelectContent>
@@ -1038,10 +1071,9 @@ function PlayerCard({
           )}
 
           <Button
-            size="sm"
-            className="w-full"
             onClick={onAddToObservation}
             disabled={adding || existsInSelected || !selectedSession}
+            className="w-full h-11 md:h-9"
           >
             {adding ? <><Loader2 className="mr-1 h-4 w-4 animate-spin" /> Adding…</> :
              existsInSelected ? "Already added" : <><PlusCircle className="mr-1 h-4 w-4" /> Add to observation</>}
@@ -1053,13 +1085,23 @@ function PlayerCard({
 }
 
 function PlayerAvatar({ src, alt }: { src: string | null; alt: string }) {
+  const base = "rounded-md border object-cover shrink-0"
   if (!src) {
     return (
-      <div className="grid h-16 w-16 shrink-0 place-items-center rounded-md bg-muted text-[10px] text-muted-foreground">
+      <div className={`grid place-items-center bg-muted text-[10px] text-muted-foreground
+                       h-14 w-14 md:h-16 md:w-16 ${base}`}>
         No photo
       </div>
     )
   }
   // eslint-disable-next-line @next/next/no-img-element
-  return <img src={src} alt={alt} className="h-16 w-16 shrink-0 rounded-md border object-cover" loading="lazy" decoding="async" />
+  return (
+    <img
+      src={src}
+      alt={alt}
+      className={`h-14 w-14 md:h-16 md:w-16 ${base}`}
+      loading="lazy"
+      decoding="async"
+    />
+  )
 }

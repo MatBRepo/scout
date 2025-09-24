@@ -1,6 +1,7 @@
 "use client"
 
 import { useEffect, useMemo, useRef, useState } from "react"
+import { useTranslations } from "next-intl"
 import { Input } from "@/components/ui/input"
 import { Button } from "@/components/ui/button"
 import { Card } from "@/components/ui/card"
@@ -133,7 +134,6 @@ function FootballCelebration({
           animation-timing-function: ease-out;
           animation-iteration-count: 1;
         }
-        /* Subtle one-time glow for the main input wrapper */
         @keyframes glow-pulse-once {
           0%   { box-shadow: 0 0 0 0 rgba(59,130,246,.35); }
           40%  { box-shadow: 0 0 0 10px rgba(59,130,246,.0); }
@@ -151,6 +151,8 @@ function FootballCelebration({
 /* ---------------- Page ---------------- */
 
 export default function DiscoverPlayersPage() {
+  const t = useTranslations()
+
   // filters/state
   const [search, setSearch] = useState("")
   const [position, setPosition] = useState<string>("any")
@@ -181,7 +183,6 @@ export default function DiscoverPlayersPage() {
 
   // celebration
   const [celebrate, setCelebrate] = useState(false)
-  const celebrateTimer = useRef<number | null>(null)
 
   const hasItems = items.length > 0
   const abortRef = useRef<AbortController | null>(null)
@@ -221,8 +222,9 @@ export default function DiscoverPlayersPage() {
       setItems(prev => (reset ? data.players : [...prev, ...(data.players ?? [])]))
     } catch (e: any) {
       if (e?.name === "AbortError") return
-      setError(e?.message || "Failed to load players")
-      toast.error(e?.message || "Failed to load players")
+      const msg = e?.message || t("discover.errors.loadFailed")
+      setError(msg)
+      toast.error(msg)
     } finally {
       setLoading(false)
     }
@@ -230,11 +232,11 @@ export default function DiscoverPlayersPage() {
 
   // initial + on filter change (debounced) -> reset list
   useEffect(() => {
-    const t = setTimeout(() => {
+    const tmo = setTimeout(() => {
       setPage(1)
       fetchPage(true)
     }, 250)
-    return () => clearTimeout(t)
+    return () => clearTimeout(tmo)
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [search, position, country, sort])
 
@@ -255,7 +257,10 @@ export default function DiscoverPlayersPage() {
   const syncFromTransfermarkt = async () => {
     const name = search.trim()
     if (!name) {
-      toast.message("Type a player name first", { description: "Synchronize uses your current search query." })
+      toast.message(
+        t("discover.sync.needName.title"),
+        { description: t("discover.sync.needName.desc") }
+      )
       return
     }
     setSyncing(true)
@@ -266,12 +271,16 @@ export default function DiscoverPlayersPage() {
         body: JSON.stringify({ q: name, mode: syncMode }),
       })
       const j = await r.json().catch(() => ({}))
-      if (!r.ok) throw new Error(j.error || "Sync failed")
-      toast.success(`Imported ${j.imported ?? 0} • Matched ${j.matched ?? 0}`)
+      if (!r.ok) throw new Error(j.error || t("discover.sync.failed"))
+
+      toast.success(t("discover.sync.result", {
+        imported: j.imported ?? 0,
+        matched: j.matched ?? 0
+      }))
       setPage(1)
       await fetchPage(true)
     } catch (e: any) {
-      toast.error(e?.message || "Sync failed")
+      toast.error(e?.message || t("discover.sync.failed"))
     } finally {
       setSyncing(false)
     }
@@ -285,17 +294,23 @@ export default function DiscoverPlayersPage() {
         { method: "POST" }
       )
       const body = await res.json().catch(() => ({}))
-      if (!res.ok) throw new Error(body.error || "Bulk sync failed")
-      toast.success(`Scanned ${body.scanned ?? 0} • Matched ${body.matched ?? 0} • Not found ${body.notFound ?? 0}`)
+      if (!res.ok) throw new Error(body.error || t("discover.sync.bulkFailed"))
+
+      toast.success(t("discover.sync.bulkResult", {
+        scanned: body.scanned ?? 0,
+        matched: body.matched ?? 0,
+        notFound: body.notFound ?? 0
+      }))
       await fetchPage(true)
     } catch (e: any) {
-      toast.error(e?.message || "Bulk sync failed")
+      toast.error(e?.message || t("discover.sync.bulkFailed"))
     } finally {
       setBulkSyncing(false)
     }
   }
 
   // ---- Follow / Unfollow ----
+  const celebrateTimer = useRef<number | null>(null)
   const triggerCelebration = () => {
     if (celebrateTimer.current) {
       window.clearTimeout(celebrateTimer.current)
@@ -317,15 +332,15 @@ export default function DiscoverPlayersPage() {
       const res = await fetch(url, { method: "POST" })
       if (!res.ok) {
         setFollowing(s => ({ ...s, [id]: false }))
-        let msg = "Could not add"
+        let msg = t("discover.errors.couldNotAdd")
         try { const b = await res.json(); msg = b?.error || msg } catch {}
         throw new Error(msg)
       }
       setInterest(i => ({ ...i, [id]: (i[id] ?? 0) + 1 }))
-      toast.success("Added to My Players")
+      toast.success(t("discover.toasts.added"))
       triggerCelebration()
     } catch (e: any) {
-      toast.error(e?.message || "Could not add")
+      toast.error(e?.message || t("discover.errors.couldNotAdd"))
     } finally {
       setPending(s => ({ ...s, [id]: false }))
     }
@@ -340,14 +355,14 @@ export default function DiscoverPlayersPage() {
       const res = await fetch(url, { method: "DELETE" })
       if (!res.ok) {
         setFollowing(s => ({ ...s, [id]: true }))
-        let msg = "Could not remove"
+        let msg = t("discover.errors.couldNotRemove")
         try { const b = await res.json(); msg = b?.error || msg } catch {}
         throw new Error(msg)
       }
       setInterest(i => ({ ...i, [id]: Math.max(0, (i[id] ?? 0) - 1) }))
-      toast.success("Removed from My Players")
+      toast.success(t("discover.toasts.removed"))
     } catch (e: any) {
-      toast.error(e?.message || "Could not remove")
+      toast.error(e?.message || t("discover.errors.couldNotRemove"))
     } finally {
       setPending(s => ({ ...s, [id]: false }))
     }
@@ -360,7 +375,10 @@ export default function DiscoverPlayersPage() {
       if (next.has(id)) next.delete(id)
       else {
         if (next.size >= MAX_COMPARE) {
-          toast.message(`Max ${MAX_COMPARE} players`, { description: "Remove one before adding another." })
+          toast.message(
+            t("discover.compare.max", {max: MAX_COMPARE}),
+            { description: t("discover.compare.removeOne") }
+          )
           return next
         }
         next.add(id)
@@ -373,7 +391,7 @@ export default function DiscoverPlayersPage() {
   const openCompare = async () => {
     const ids = Array.from(selected)
     if (ids.length < 2) {
-      toast.message("Pick at least two players to compare")
+      toast.message(t("discover.compare.needTwo"))
       return
     }
     setCompareOpen(true)
@@ -400,8 +418,8 @@ export default function DiscoverPlayersPage() {
   }
 
   const formatVal = (v: any) => {
-    if (v == null || v === "") return "—"
-    if (typeof v === "boolean") return v ? "Yes" : "No"
+    if (v == null || v === "") return t("ui.na")
+    if (typeof v === "boolean") return v ? t("ui.yes") : t("ui.no")
     return String(v)
   }
 
@@ -446,23 +464,26 @@ export default function DiscoverPlayersPage() {
                 <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" aria-hidden="true" />
                 <Input
                   className="file:text-foreground placeholder:text-muted-foreground selection:bg-primary selection:text-primary-foreground dark:bg-input/30 border-input h-10 w-full min-w-0 rounded-md border bg-transparent px-3 py-2 text-base shadow-xs transition-[color,box-shadow] outline-none disabled:pointer-events-none disabled:cursor-not-allowed disabled:opacity-50 md:text-sm focus-visible:border-ring focus-visible:ring-ring/50 focus-visible:ring-[3px] aria-invalid:ring-destructive/20 dark:aria-invalid:ring-destructive/40 aria-invalid:border-destructive"
-                  placeholder="Search player name…"
+                  placeholder={t("discover.search.placeholder")}
                   value={search}
                   onChange={(e) => setSearch(e.target.value)}
                   onKeyDown={(e) => { if (e.key === "Enter") { setPage(1); fetchPage(true) } }}
-                  aria-label="Search or add player"
+                  aria-label={t("discover.search.aria")}
                   style={{paddingLeft:"30px"}}
                 />
                 {/* mini floating label */}
                 <span className="pointer-events-none absolute -top-2.5 left-3 rounded-full bg-primary px-2 py-0.5 text-[10px] font-medium text-primary-foreground shadow-sm">
-                  Search / Add
+                  {t("discover.search.label")}
                 </span>
               </div>
             </div>
 
             {/* helper row under input on small screens */}
             <div className="mt-1 flex flex-wrap items-center gap-2 text-[11px] text-muted-foreground">
-              Press <kbd className="rounded border px-1.5 py-0.5 text-[10px]">Enter</kbd> to search · Use <em>Synchronize</em> to import from Transfermarkt
+              {t.rich("discover.search.helper", {
+                kbd: (chunks) => <kbd className="rounded border px-1.5 py-0.5 text-[10px]">{chunks}</kbd>,
+                em: (chunks) => <em>{chunks}</em>
+              })}
             </div>
           </div>
 
@@ -473,7 +494,7 @@ export default function DiscoverPlayersPage() {
               <Globe className="absolute left-2 top-2.5 h-4 w-4 text-muted-foreground" aria-hidden="true" />
               <Input
                 className="pl-8 w-40"
-                placeholder="Country"
+                placeholder={t("discover.filters.country")}
                 value={country}
                 onChange={(e) => setCountry(e.target.value)}
               />
@@ -491,7 +512,7 @@ export default function DiscoverPlayersPage() {
                   aria-pressed={sort === k}
                   onClick={() => setSort(k)}
                 >
-                  {k === "newest" ? "Newest" : k === "name" ? "Name" : "Interest"}
+                  {k === "newest" ? t("discover.sort.newest") : k === "name" ? t("discover.sort.name") : t("discover.sort.interest")}
                 </Button>
               ))}
             </div>
@@ -501,9 +522,9 @@ export default function DiscoverPlayersPage() {
               variant="outline"
               className="gap-2"
               onClick={() => { setSearch(""); setPosition("any"); setCountry(""); setSort("newest") }}
-              title="Reset filters"
+              title={t("discover.filters.reset")}
             >
-              <Filter className="h-4 w-4" /> Reset
+              <Filter className="h-4 w-4" /> {t("discover.filters.reset")}
             </Button>
           </div>
         </div>
@@ -518,9 +539,9 @@ export default function DiscoverPlayersPage() {
               className="px-3"
               aria-pressed={view === "cards"}
               onClick={() => setView("cards")}
-              title="Card view"
+              title={t("discover.view.cardTitle")}
             >
-              <LayoutGrid className="mr-1 h-4 w-4" /> Cards
+              <LayoutGrid className="mr-1 h-4 w-4" /> {t("discover.view.cards")}
             </Button>
             <Button
               type="button"
@@ -529,9 +550,9 @@ export default function DiscoverPlayersPage() {
               className="px-3"
               aria-pressed={view === "table"}
               onClick={() => setView("table")}
-              title="Table view"
+              title={t("discover.view.tableTitle")}
             >
-              <TableIcon className="mr-1 h-4 w-4" /> Table
+              <TableIcon className="mr-1 h-4 w-4" /> {t("discover.view.table")}
             </Button>
           </div>
         </div>
@@ -540,7 +561,7 @@ export default function DiscoverPlayersPage() {
       {/* Sync toolbar */}
       <Card className="p-3">
         <div className="flex flex-col gap-3 md:flex-row md:items-center md:flex-wrap">
-          <div className="text-sm text-muted-foreground">Transfermarkt sync:</div>
+          <div className="text-sm text-muted-foreground">{t("discover.sync.title")}</div>
 
           <div className="inline-flex items-center gap-1 rounded-md border p-1">
             {(["players","clubs","competitions"] as SyncMode[]).map((m) => (
@@ -553,7 +574,7 @@ export default function DiscoverPlayersPage() {
                 aria-pressed={syncMode === m}
                 onClick={() => setSyncMode(m)}
               >
-                {m === "players" ? "Players" : m === "clubs" ? "Club squad" : "Competition squads"}
+                {m === "players" ? t("discover.sync.mode.players") : m === "clubs" ? t("discover.sync.mode.clubs") : t("discover.sync.mode.competitions")}
               </Button>
             ))}
           </div>
@@ -563,10 +584,10 @@ export default function DiscoverPlayersPage() {
             className="gap-2"
             onClick={syncFromTransfermarkt}
             disabled={syncing || !search.trim()}
-            title="Import from Transfermarkt using current Search"
+            title={t("discover.sync.tip")}
           >
             <RefreshCw className="h-4 w-4" aria-hidden="true" />
-            {syncing ? "Synchronizing…" : "Synchronize"}
+            {syncing ? t("discover.sync.synchronizing") : t("discover.sync.synchronize")}
           </Button>
 
           <div className="md:ml-auto" />
@@ -576,10 +597,10 @@ export default function DiscoverPlayersPage() {
             className="gap-2"
             onClick={syncMissing}
             disabled={bulkSyncing}
-            title="Sync missing Transfermarkt links for existing players"
+            title={t("discover.sync.missingTip")}
           >
             <RefreshCw className="h-4 w-4" aria-hidden="true" />
-            {bulkSyncing ? "Syncing Missing…" : "Sync Missing"}
+            {bulkSyncing ? t("discover.sync.syncingMissing") : t("discover.sync.syncMissing")}
           </Button>
         </div>
       </Card>
@@ -587,19 +608,25 @@ export default function DiscoverPlayersPage() {
       {/* Results header + active chips */}
       <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
         <div className="order-2 text-sm text-muted-foreground sm:order-1">
-          {loading ? "Loading…" : `${items.length} result${items.length === 1 ? "" : "s"}`}
+          {loading ? t("loading.loading") : t("discover.results.count", {count: items.length})}
         </div>
         <div className="order-1 -mx-1 overflow-x-auto no-scrollbar sm:order-2">
           <div className="flex gap-2 px-1">
             {[
-              ...(search ? [{ label: `Search: "${search}"`, clear: () => setSearch("") }] : []),
-              ...(position !== "any" ? [{ label: `Pos: ${position}`, clear: () => setPosition("any") }] : []),
-              ...(country ? [{ label: `Country: ${country}`, clear: () => setCountry("") }] : []),
-              ...(sort !== "newest" ? [{ label: `Sort: ${sort}`, clear: () => setSort("newest") }] : []),
+              ...(search ? [{ label: t("discover.chips.search", {q: search}), clear: () => setSearch("") }] : []),
+              ...(position !== "any" ? [{ label: t("discover.chips.position", {pos: position}), clear: () => setPosition("any") }] : []),
+              ...(country ? [{ label: t("discover.chips.country", {country}), clear: () => setCountry("") }] : []),
+              ...(sort !== "newest" ? [{ label: t("discover.chips.sort", {
+                sort: sort === "newest" ? t("discover.sort.newest") : sort === "name" ? t("discover.sort.name") : t("discover.sort.interest")
+              }), clear: () => setSort("newest") }] : []),
             ].map((f) => (
               <Badge key={f.label} variant="secondary" className="flex items-center gap-1">
                 {f.label}
-                <button className="ml-1 rounded p-0.5 hover:bg-muted" onClick={f.clear} aria-label={`Clear ${f.label}`}>
+                <button
+                  className="ml-1 rounded p-0.5 hover:bg-muted"
+                  onClick={f.clear}
+                  aria-label={t("discover.filters.clear", {label: f.label})}
+                >
                   <X className="h-3.5 w-3.5" aria-hidden="true" />
                 </button>
               </Badge>
@@ -612,9 +639,9 @@ export default function DiscoverPlayersPage() {
       {error && (
         <Card className="p-4 border-destructive/30">
           <div className="flex items-center justify-between gap-3">
-            <div className="truncate text-sm text-red-600">Error: {error}</div>
+            <div className="truncate text-sm text-red-600">{t("discover.error.prefix")} {error}</div>
             <Button size="sm" variant="outline" className="gap-2" onClick={() => fetchPage(true)} disabled={loading}>
-              <RotateCw className="h-4 w-4" /> Retry
+              <RotateCw className="h-4 w-4" /> {t("actions.retry")}
             </Button>
           </div>
         </Card>
@@ -641,11 +668,11 @@ export default function DiscoverPlayersPage() {
             {/* No results */}
             {!loading && !hasItems && !error && (
               <Card className="col-span-full rounded-2xl p-8 text-center shadow-sm">
-                <div className="mb-1 text-lg font-medium">No players found</div>
+                <div className="mb-1 text-lg font-medium">{t("discover.empty.title")}</div>
                 <div className="mb-4 text-sm text-muted-foreground">
                   {search.trim()
-                    ? <>No results for <span className="font-medium">&ldquo;{search}&rdquo;</span>. You can import this player from Transfermarkt.</>
-                    : <>Try adjusting your filters or search query.</>}
+                    ? t.rich("discover.empty.bodyQuery", {q: () => <span className="font-medium">“{search}”</span>})
+                    : t("discover.empty.bodyNoQuery")}
                 </div>
                 <div className="flex flex-wrap items-center justify-center gap-2">
                   <Button
@@ -653,16 +680,16 @@ export default function DiscoverPlayersPage() {
                     onClick={() => { setSearch(""); setPosition("any"); setCountry(""); setSort("newest") }}
                     className="gap-2"
                   >
-                    <Filter className="h-4 w-4" /> Reset filters
+                    <Filter className="h-4 w-4" /> {t("discover.filters.reset")}
                   </Button>
                   <Button
                     onClick={syncFromTransfermarkt}
                     disabled={!search.trim() || syncing}
                     className="gap-2"
-                    title="Import this player from Transfermarkt using your search"
+                    title={t("discover.sync.tip")}
                   >
                     <RefreshCw className="h-4 w-4" />
-                    {syncing ? "Synchronizing…" : `Synchronize “${search.trim() || "name"}”`}
+                    {syncing ? t("discover.sync.synchronizing") : t("discover.empty.syncButton", {q: search.trim() || "name"})}
                   </Button>
                 </div>
               </Card>
@@ -684,7 +711,7 @@ export default function DiscoverPlayersPage() {
                       onChange={() => toggleSelect(p.id)}
                       className="accent-foreground"
                     />
-                    Select
+                    {t("discover.select")}
                   </label>
 
                   <div className="aspect-[4/3] w-full overflow-hidden rounded-xl border bg-muted">
@@ -700,15 +727,15 @@ export default function DiscoverPlayersPage() {
                   <div className="mt-3">
                     <div className="truncate font-semibold leading-tight">{p.full_name}</div>
                     <div className="truncate text-xs text-muted-foreground">
-                      {p.current_club_name ?? "Unknown club"}
+                      {p.current_club_name ?? t("discover.player.unknownClub")}
                       {p.current_club_country ? ` · ${p.current_club_country}` : ""}
                     </div>
                     <div className="mt-2 flex flex-wrap items-center gap-2">
                       {p.main_position && <Badge variant="secondary">{p.main_position}</Badge>}
-                      <Badge variant="outline" className="gap-1" title="Scouts are interested in this player">
+                      <Badge variant="outline" className="gap-1" title={t("discover.player.scoutsTitle")}>
                         <Users className="h-3.5 w-3.5" aria-hidden="true" />
-                        <span className="sr-only">Scouts interested: </span>
-                        Scouts {interestCount}
+                        <span className="sr-only">{t("discover.player.scoutsSr")}</span>
+                        {t("discover.player.scouts")} {interestCount}
                       </Badge>
                       {p.transfermarkt_url && (
                         <a
@@ -732,7 +759,7 @@ export default function DiscoverPlayersPage() {
                         onClick={() => unfollow(p.id)}
                         disabled={loading || isPending}
                       >
-                        <Check className="h-4 w-4" /> In My Players — Remove
+                        <Check className="h-4 w-4" /> {t("discover.actions.inMyPlayersRemove")}
                       </Button>
                     ) : (
                       <Button
@@ -741,7 +768,7 @@ export default function DiscoverPlayersPage() {
                         disabled={loading || isPending}
                         aria-live="polite"
                       >
-                        <Plus className="h-4 w-4" /> {isPending ? "Adding…" : "Add to My Players"}
+                        <Plus className="h-4 w-4" /> {isPending ? t("discover.actions.adding") : t("discover.actions.addToMyPlayers")}
                       </Button>
                     )}
                   </div>
@@ -758,14 +785,14 @@ export default function DiscoverPlayersPage() {
           <table className="min-w-[900px] w-full border-collapse">
             <thead className="sticky top-0 z-10 bg-background">
               <tr className="border-b">
-                <th className="px-2 py-2 text-left text-xs font-medium text-muted-foreground">Select</th>
-                <th className="px-2 py-2 text-left text-xs font-medium text-muted-foreground">Player</th>
-                <th className="px-2 py-2 text-left text-xs font-medium text-muted-foreground">Position</th>
-                <th className="px-2 py-2 text-left text-xs font-medium text-muted-foreground">Club</th>
-                <th className="px-2 py-2 text-left text-xs font-medium text-muted-foreground">Country</th>
-                <th className="px-2 py-2 text-left text-xs font-medium text-muted-foreground">Interest</th>
-                <th className="px-2 py-2 text-left text-xs font-medium text-muted-foreground">Transfermarkt</th>
-                <th className="px-2 py-2 text-right text-xs font-medium text-muted-foreground">Actions</th>
+                <th className="px-2 py-2 text-left text-xs font-medium text-muted-foreground">{t("table.headers.select")}</th>
+                <th className="px-2 py-2 text-left text-xs font-medium text-muted-foreground">{t("table.headers.player")}</th>
+                <th className="px-2 py-2 text-left text-xs font-medium text-muted-foreground">{t("table.headers.position")}</th>
+                <th className="px-2 py-2 text-left text-xs font-medium text-muted-foreground">{t("table.headers.club")}</th>
+                <th className="px-2 py-2 text-left text-xs font-medium text-muted-foreground">{t("table.headers.country")}</th>
+                <th className="px-2 py-2 text-left text-xs font-medium text-muted-foreground">{t("table.headers.interest")}</th>
+                <th className="px-2 py-2 text-left text-xs font-medium text-muted-foreground">{t("table.headers.transfermarkt")}</th>
+                <th className="px-2 py-2 text-right text-xs font-medium text-muted-foreground">{t("table.headers.actions")}</th>
               </tr>
             </thead>
             <tbody>
@@ -791,7 +818,7 @@ export default function DiscoverPlayersPage() {
               {!loading && !hasItems && !error && (
                 <tr>
                   <td colSpan={8} className="px-2 py-6 text-center text-sm text-muted-foreground">
-                    No players found. Adjust filters or use <em>Synchronize</em> to import from Transfermarkt.
+                    {t("discover.empty.table")}
                   </td>
                 </tr>
               )}
@@ -810,7 +837,7 @@ export default function DiscoverPlayersPage() {
                         checked={isSelected}
                         onChange={() => toggleSelect(p.id)}
                         className="accent-foreground"
-                        aria-label={`Select ${p.full_name}`}
+                        aria-label={t("table.selectAria", {name: p.full_name})}
                       />
                     </td>
                     <td className="px-2 py-3 align-middle">
@@ -824,14 +851,14 @@ export default function DiscoverPlayersPage() {
                         <div className="min-w-0">
                           <div className="truncate font-medium">{p.full_name}</div>
                           <div className="truncate text-xs text-muted-foreground">
-                            {p.current_club_name ?? "Unknown club"}
+                            {p.current_club_name ?? t("discover.player.unknownClub")}
                           </div>
                         </div>
                       </div>
                     </td>
-                    <td className="px-2 py-3 align-middle">{p.main_position ?? "—"}</td>
-                    <td className="px-2 py-3 align-middle">{p.current_club_name ?? "—"}</td>
-                    <td className="px-2 py-3 align-middle">{p.current_club_country ?? "—"}</td>
+                    <td className="px-2 py-3 align-middle">{p.main_position ?? t("ui.na")}</td>
+                    <td className="px-2 py-3 align-middle">{p.current_club_name ?? t("ui.na")}</td>
+                    <td className="px-2 py-3 align-middle">{p.current_club_country ?? t("ui.na")}</td>
                     <td className="px-2 py-3 align-middle">
                       <Badge variant="outline" className="gap-1">
                         <Users className="h-3.5 w-3.5" aria-hidden="true" /> {interestCount}
@@ -840,9 +867,9 @@ export default function DiscoverPlayersPage() {
                     <td className="px-2 py-3 align-middle">
                       {p.transfermarkt_url ? (
                         <a href={p.transfermarkt_url} target="_blank" rel="noreferrer" className="inline-flex items-center gap-1 underline">
-                          Open <ExternalLink className="h-3.5 w-3.5" />
+                          {t("ui.open")} <ExternalLink className="h-3.5 w-3.5" />
                         </a>
-                      ) : "—"}
+                      ) : t("ui.na")}
                     </td>
                     <td className="px-2 py-3 text-right align-middle">
                       {isFollowing ? (
@@ -853,7 +880,7 @@ export default function DiscoverPlayersPage() {
                           onClick={() => unfollow(p.id)}
                           disabled={loading || isPending}
                         >
-                          <Check className="h-4 w-4" /> In list
+                          <Check className="h-4 w-4" /> {t("discover.actions.inList")}
                         </Button>
                       ) : (
                         <Button
@@ -862,7 +889,7 @@ export default function DiscoverPlayersPage() {
                           onClick={() => follow(p.id)}
                           disabled={loading || isPending}
                         >
-                          <Plus className="h-4 w-4" /> Add
+                          <Plus className="h-4 w-4" /> {t("discover.actions.add")}
                         </Button>
                       )}
                     </td>
@@ -878,7 +905,7 @@ export default function DiscoverPlayersPage() {
       <div className="flex justify-center">
         {hasItems && (
           <Button variant="outline" onClick={loadMore} disabled={loading}>
-            {loading ? "Loading…" : "Load more"}
+            {loading ? t("loading.loading") : t("actions.loadMore")}
           </Button>
         )}
       </div>
@@ -889,14 +916,14 @@ export default function DiscoverPlayersPage() {
           <Card className="p-3 shadow-lg">
             <div className="flex flex-wrap items-center gap-3">
               <div className="text-sm">
-                <span className="font-medium">{selected.size}</span> selected (max {MAX_COMPARE})
+                {t("discover.compare.selected", {count: selected.size, max: MAX_COMPARE})}
               </div>
               <div className="flex gap-2">
                 <Button className="gap-2" onClick={openCompare}>
-                  <ArrowLeftRight className="h-4 w-4" /> Compare
+                  <ArrowLeftRight className="h-4 w-4" /> {t("discover.compare.compare")}
                 </Button>
                 <Button variant="outline" onClick={clearSelection}>
-                  Clear
+                  {t("actions.clear")}
                 </Button>
               </div>
             </div>
@@ -910,20 +937,20 @@ export default function DiscoverPlayersPage() {
           <div className="absolute inset-0 bg-black/60" onClick={() => setCompareOpen(false)} />
           <div className="absolute inset-0 overflow-auto bg-background p-4 md:inset-x-4 md:top-8 md:bottom-8 md:rounded-2xl md:shadow-2xl">
             <div className="mb-4 flex items-center justify-between">
-              <div className="font-semibold">Compare players</div>
-              <Button variant="ghost" size="icon" onClick={() => setCompareOpen(false)} aria-label="Close">
+              <div className="font-semibold">{t("discover.compare.title")}</div>
+              <Button variant="ghost" size="icon" onClick={() => setCompareOpen(false)} aria-label={t("ui.close")}>
                 <X className="h-5 w-5" />
               </Button>
             </div>
 
             {compareLoading ? (
-              <div className="text-sm text-muted-foreground">Loading details…</div>
+              <div className="text-sm text-muted-foreground">{t("discover.compare.loading")}</div>
             ) : (
               <div className="w-full overflow-auto">
                 <table className="min-w-[700px] w-full border-separate border-spacing-y-2">
                   <thead>
                     <tr>
-                      <th className="w-36 px-2 py-2 text-left text-xs font-medium text-muted-foreground">Field</th>
+                      <th className="w-36 px-2 py-2 text-left text-xs font-medium text-muted-foreground">{t("discover.compare.field")}</th>
                       {Array.from(selected).map((id) => (
                         <th key={id} className="px-2 py-2 text-left text-xs font-medium text-muted-foreground">
                           {formatVal(getDetail(id, "name"))}
@@ -933,15 +960,15 @@ export default function DiscoverPlayersPage() {
                   </thead>
                   <tbody>
                     {[
-                      ["Position", "position"],
-                      ["Club", "club"],
-                      ["Country", "country"],
-                      ["Date of Birth", "dob"],
-                      ["Height (cm)", "height_cm"],
-                      ["Weight (kg)", "weight_kg"],
-                      ["Foot", "foot"],
-                      ["Market value (€)", "market_value"],
-                      ["Transfermarkt", "tm"],
+                      [t("discover.compare.fields.position"), "position"],
+                      [t("discover.compare.fields.club"), "club"],
+                      [t("discover.compare.fields.country"), "country"],
+                      [t("discover.compare.fields.dob"), "dob"],
+                      [t("discover.compare.fields.height"), "height_cm"],
+                      [t("discover.compare.fields.weight"), "weight_kg"],
+                      [t("discover.compare.fields.foot"), "foot"],
+                      [t("discover.compare.fields.marketValue"), "market_value"],
+                      [t("discover.compare.fields.transfermarkt"), "tm"],
                     ].map(([label, key]) => (
                       <tr key={key as string}>
                         <td className="py-2 px-2 text-xs text-muted-foreground">{label}</td>
@@ -951,7 +978,7 @@ export default function DiscoverPlayersPage() {
                             <td key={id} className="py-2 px-2 text-sm">
                               {key === "tm" && typeof v === "string" ? (
                                 <a href={v} target="_blank" rel="noreferrer" className="underline">
-                                  Open
+                                  {t("ui.open")}
                                 </a>
                               ) : (
                                 formatVal(v)
@@ -968,9 +995,6 @@ export default function DiscoverPlayersPage() {
           </div>
         </div>
       )}
-
-      {/* Celebration layer */}
-      <FootballCelebration show={celebrate} />
     </div>
   )
 }

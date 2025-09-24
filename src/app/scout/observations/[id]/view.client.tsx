@@ -11,16 +11,14 @@ import { Switch } from "@/components/ui/switch"
 import { Separator } from "@/components/ui/separator"
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog"
 import { toast } from "sonner"
-import { SlidersHorizontal, ChevronDown } from "lucide-react"
+import { Minus } from "lucide-react"
+
 
 import {
   Plus, Save, Trash2, CalendarDays, Users, Search, Loader2,
   ExternalLink, Mic, Square, FileText, Star, Tv, Binoculars
 } from "lucide-react"
 import VoiceNotesPanel from "../_components/VoiceNotesPanel.client"
-
-
-
 
 type Session = {
   id: string
@@ -65,14 +63,14 @@ const MAX_SECONDS = 60
 function ModeBadge({ mode }: { mode: "live" | "video" }) {
   if (mode === "video") {
     return (
-      <span className="inline-flex items-center gap-1 text-xs text-muted-foreground">
+      <span className="inline-flex items-center gap-0 text-xs text-muted-foreground">
         <Tv className="h-3.5 w-3.5" />
         Video
       </span>
     )
   }
   return (
-    <span className="inline-flex items-center gap-1 text-xs text-muted-foreground">
+    <span className="inline-flex items-center gap-0 text-xs text-muted-foreground">
       <Binoculars className="h-3.5 w-3.5" />
       Live
     </span>
@@ -92,7 +90,7 @@ function Rate5({
 }) {
   const v = Math.max(0, Math.min(5, Number(value || 0)))
   return (
-    <div className="inline-flex items-center gap-1" role="radiogroup" aria-label={ariaLabel}>
+    <div className="inline-flex items-center gap-0" role="radiogroup" aria-label={ariaLabel}>
       {[1, 2, 3, 4, 5].map((n) => {
         const active = n <= v
         return (
@@ -100,7 +98,8 @@ function Rate5({
             type="button"
             key={n}
             onClick={() => !disabled && onChange(n)}
-            className={`h-7 w-7 grid place-items-center rounded-md transition
+            className={`grid place-items-center rounded-md transition
+              h-5 w-8 sm:h-5 sm:w-5
               ${active ? "bg-primary/10 text-primary" : "text-muted-foreground hover:text-foreground"}`}
             role="radio"
             aria-checked={active}
@@ -377,15 +376,13 @@ export default function ObservationEditor({ session: initial, rows: initialRows 
         .single()
       if (error) throw error
 
-// attach to my players (idempotent)
-const { error: mapErr } = await supabase
-  .from("players_scouts")
-  .upsert({ player_id: player.id, scout_id: uid }, { onConflict: "scout_id,player_id" })
-
-// It's safe to ignore duplicates; only surface real errors if you want
-if (mapErr && mapErr.code !== "23505") {
-  console.warn("players_scouts upsert warning:", mapErr.message)
-}
+      // attach to my players (idempotent)
+      const { error: mapErr } = await supabase
+        .from("players_scouts")
+        .upsert({ player_id: player.id, scout_id: uid }, { onConflict: "scout_id,player_id" })
+      if (mapErr && mapErr.code !== "23505") {
+        console.warn("players_scouts upsert warning:", mapErr.message)
+      }
 
       // immediately add to this observation
       await addToObservation({ type: "player", id: player.id })
@@ -666,7 +663,7 @@ if (mapErr && mapErr.code !== "23505") {
   /* ================================ RENDER ================================ */
 
   return (
-    <div className="space-y-8">
+    <div className="max-w-screen-2xl mx-auto w-full space-y-8 sm:px-6">
       {/* Header / Meta */}
       <section className="space-y-3">
         <div className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
@@ -678,7 +675,7 @@ if (mapErr && mapErr.code !== "23505") {
               className="text-lg font-semibold"
               aria-label="Session title"
             />
-            <div className="grid grid-cols-1 gap-2 sm:grid-cols-3">
+            <div className="grid grid-cols-1 gap-2 sm:grid-cols-2 md:grid-cols-3">
               <Input
                 value={formatDate(session.match_date)}
                 onChange={(e) => onMetaChange("match_date", e.target.value)}
@@ -701,17 +698,17 @@ if (mapErr && mapErr.code !== "23505") {
             </div>
 
             <div className="flex flex-wrap items-center gap-3 text-xs text-muted-foreground">
-              <span className="inline-flex items-center gap-1">
+              <span className="inline-flex items-center gap-0">
                 <CalendarDays className="h-3.5 w-3.5" />
                 Autosave: {savingMeta ? "saving…" : "idle"}
               </span>
-              <span className="inline-flex items-center gap-1">
+              <span className="inline-flex items-center gap-0">
                 <Users className="h-3.5 w-3.5" /> {totalPlayers} player{totalPlayers === 1 ? "" : "s"}
               </span>
-              <span className="inline-flex items-center gap-1" title="Text notes (session + players)">
+              <span className="inline-flex items-center gap-0" title="Text notes (session + players)">
                 <FileText className="h-3.5 w-3.5" /> {textNotesCount} text
               </span>
-              <span className="inline-flex items-center gap-1" title="Voice notes (all)">
+              <span className="inline-flex items-center gap-0" title="Voice notes (all)">
                 <Mic className="h-3.5 w-3.5" /> {voiceTotal} voice
               </span>
               {session.mode && <ModeBadge mode={(session.mode ?? "live")} />}
@@ -740,6 +737,7 @@ if (mapErr && mapErr.code !== "23505") {
               onChange={(e) => onMetaChange("notes", e.target.value)}
               placeholder="Notatki ogólne…"
               aria-label="Observation notes"
+              className="resize-y"
             />
           </div>
         </div>
@@ -747,9 +745,9 @@ if (mapErr && mapErr.code !== "23505") {
 
       <Separator />
 
-      {/* Observation voice notes (minimal) */}
+      {/* Observation voice notes */}
       <section className="space-y-2">
-        <div className="flex items-center justify-between">
+        <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
           <div className="text-sm font-medium">Notatki głosowe (obserwacja)</div>
           <div className="flex items-center gap-2">
             <InlineRecorder
@@ -777,7 +775,7 @@ if (mapErr && mapErr.code !== "23505") {
         </div>
 
         {openObsNotes && (
-          <div id="obs-voice-panel">
+          <div id="obs-voice-panel" className="overflow-x-auto">
             <VoiceNotesPanel key={obsNotesKey} observationId={session.id} title="Notatki głosowe" />
           </div>
         )}
@@ -785,7 +783,7 @@ if (mapErr && mapErr.code !== "23505") {
 
       <Separator />
 
-      {/* Add players – search + quick add (no cards) */}
+      {/* Add players – search + quick add */}
       <section className="space-y-2">
         <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
           <div className="relative flex-1">
@@ -806,7 +804,7 @@ if (mapErr && mapErr.code !== "23505") {
         </div>
 
         {!!results.length && (
-          <ul className="grid gap-2 sm:grid-cols-2">
+          <ul className="grid gap-2 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4">
             {results.map((r) => (
               <li
                 key={`${r.type}-${r.id}`}
@@ -830,7 +828,7 @@ if (mapErr && mapErr.code !== "23505") {
                           href={r.tm}
                           target="_blank"
                           rel="noreferrer"
-                          className="inline-flex items-center gap-1 underline"
+                          className="inline-flex items-center gap-0 underline"
                         >
                           TM <ExternalLink className="h-3.5 w-3.5" />
                         </a>
@@ -859,199 +857,212 @@ if (mapErr && mapErr.code !== "23505") {
 
       <Separator />
 
-      {/* Players list – flat rows, minimal chrome */}
-      <section className="space-y-3">
-        <div className="hidden grid-cols-[1fr_100px_180px_180px_auto] gap-3 px-1 text-[11px] text-muted-foreground md:grid">
-          <span>Zawodnik</span>
-          <span className="text-right">Minuty</span>
-          <span>Ocena ogólna</span>
-          <span>Oceny cząstkowe</span>
-          <span className="text-right">Akcje</span>
-        </div>
+{/* Players – new card UX */}
+<section className="space-y-3">
+  <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-3">
+    {rows.map((row) => {
+      const p = row.players ?? row.scout_player_entries
+      const isSaving = !!savingRow[row.id]
+      const isNotesOpen = !!openNotesByRow[row.id]
+      const isDirty = !!dirty[row.id]
 
-        <div className="space-y-2">
-          {rows.map((row) => {
-            const p = row.players ?? row.scout_player_entries
-            const isSaving = !!savingRow[row.id]
-            const isNotesOpen = !!openNotesByRow[row.id]
-            const isDirty = !!dirty[row.id]
+      const voiceCountForRow = voiceCountsByRow[row.id] || 0
+      const textNoteForRow = ((dirty[row.id]?.notes ?? row.notes) || "").trim() ? 1 : 0
 
-            const voiceCountForRow = voiceCountsByRow[row.id] || 0
-            const textNoteForRow = rowHasTextNote(row) ? 1 : 0
+      const currentOverall = (dirty[row.id]?.rating ?? row.rating) ?? 0
+      const curOff = (dirty[row.id]?.offense_rating ?? row.offense_rating) ?? 0
+      const curDef = (dirty[row.id]?.defense_rating ?? row.defense_rating) ?? 0
+      const curTec = (dirty[row.id]?.technique_rating ?? row.technique_rating) ?? 0
+      const curMot = (dirty[row.id]?.motor_rating ?? row.motor_rating) ?? 0
 
-            const currentOverall = (dirty[row.id]?.rating ?? row.rating) ?? 0
-            const curOff = (dirty[row.id]?.offense_rating ?? row.offense_rating) ?? 0
-            const curDef = (dirty[row.id]?.defense_rating ?? row.defense_rating) ?? 0
-            const curTec = (dirty[row.id]?.technique_rating ?? row.technique_rating) ?? 0
-            const curMot = (dirty[row.id]?.motor_rating ?? row.motor_rating) ?? 0
+      const minutes = (dirty[row.id]?.minutes_watched ?? row.minutes_watched) ?? 0
+      const step = (n: number) => {
+        const next = Math.max(0, minutes + n)
+        setRowDraft(row.id, { minutes_watched: next })
+      }
 
-            return (
-              <div
-                key={row.id}
-                className={`rounded-md px-2.5 py-2 transition-colors hover:bg-muted/30 ${isDirty ? "bg-amber-50/40 dark:bg-amber-950/20" : ""}`}
-              >
-                <div className="grid gap-3 md:grid-cols-[1fr_100px_180px_180px_auto] md:items-center">
-                  {/* Player */}
-                  <div className="min-w-0 flex items-start gap-3">
-                    {/* eslint-disable-next-line @next/next/no-img-element */}
-                    <img
-                      src={p?.image_url || FALLBACK_SVG}
-                      alt={p?.full_name || "Player"}
-                      className="h-10 w-10 rounded object-cover"
-                    />
-                    <div className="min-w-0">
-                      <div className="flex items-center gap-2">
-                        <div className="truncate font-medium">{p?.full_name ?? "(unknown)"}</div>
-                        {isDirty && <span className="h-1.5 w-1.5 rounded-full bg-amber-500" title="Unsaved changes" />}
-                      </div>
-                      <div className="mt-1 flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
-                        {row.player_id && <span className="rounded bg-muted/60 px-1.5 py-0.5">Players</span>}
-                        {row.player_entry_id && <span className="rounded bg-muted/60 px-1.5 py-0.5">Entry</span>}
-                        {p?.transfermarkt_url && (
-                          <a
-                            href={p.transfermarkt_url}
-                            target="_blank"
-                            rel="noreferrer"
-                            className="inline-flex items-center gap-1 underline hover:text-foreground"
-                          >
-                            TM <ExternalLink className="h-3.5 w-3.5" />
-                          </a>
-                        )}
-                        <span className="inline-flex items-center gap-2 md:hidden">
-                          <span className="inline-flex items-center gap-1" title="Tekst">
-                            <FileText className="h-3.5 w-3.5" /> {textNoteForRow}
-                          </span>
-                          <span className="inline-flex items-center gap-1" title="Głos">
-                            <Mic className="h-3.5 w-3.5" /> {voiceCountForRow}
-                          </span>
-                        </span>
-                      </div>
-                    </div>
-                  </div>
-
-                  {/* Minutes */}
-                  <div className="grid gap-1">
-                    <label className="text-[11px] text-muted-foreground md:hidden">Minuty</label>
-                    <Input
-                      inputMode="numeric"
-                      type="number"
-                      min={0}
-                      className="h-8 text-right"
-                      defaultValue={row.minutes_watched ?? 0}
-                      onChange={(e) => setRowDraft(row.id, { minutes_watched: Number(e.target.value || 0) })}
-                      aria-label="Minutes watched"
-                    />
-                  </div>
-
-                  {/* Overall 1–5 */}
-                  <div className="grid gap-1">
-                    <label className="text-[11px] text-muted-foreground md:hidden">Ocena ogólna (1–5)</label>
-                    <Rate5
-                      value={currentOverall || 0}
-                      onChange={(n) => setRowDraft(row.id, { rating: n })}
-                      ariaLabel="Overall rating"
-                    />
-                  </div>
-
-                  {/* Sub-ratings */}
-                  <div className="grid grid-cols-2 gap-x-4 gap-y-2">
-                    <div className="grid gap-0.5">
-                      <span className="text-[11px] text-muted-foreground">Ofensywa</span>
-                      <Rate5 value={curOff} onChange={(n) => setRowDraft(row.id, { offense_rating: n })} ariaLabel="Ofensywa" />
-                    </div>
-                    <div className="grid gap-0.5">
-                      <span className="text-[11px] text-muted-foreground">Defensywa</span>
-                      <Rate5 value={curDef} onChange={(n) => setRowDraft(row.id, { defense_rating: n })} ariaLabel="Defensywa" />
-                    </div>
-                    <div className="grid gap-0.5">
-                      <span className="text-[11px] text-muted-foreground">Technika</span>
-                      <Rate5 value={curTec} onChange={(n) => setRowDraft(row.id, { technique_rating: n })} ariaLabel="Technika" />
-                    </div>
-                    <div className="grid gap-0.5">
-                      <span className="text-[11px] text-muted-foreground">Motoryka</span>
-                      <Rate5 value={curMot} onChange={(n) => setRowDraft(row.id, { motor_rating: n })} ariaLabel="Motoryka" />
-                    </div>
-                  </div>
-
-                  {/* Actions */}
-                  <div className="flex flex-wrap items-center justify-end gap-1.5">
-                    <Button
-                      size="sm"
-                      variant={isNotesOpen ? "secondary" : "outline"}
-                      className="gap-2"
-                      onClick={() => toggleRowNotes(row.id)}
-                      aria-expanded={isNotesOpen}
-                      aria-controls={`notes-${row.id}`}
-                    >
-                      <FileText className="h-4 w-4" />
-                      <span className="hidden md:inline">
-                        {isNotesOpen ? `Ukryj notatki (${voiceCountForRow})` : `Notatki (${voiceCountForRow})`}
-                      </span>
-                      <span className="md:hidden tabular-nums">({voiceCountForRow})</span>
-                    </Button>
-
-                    {showRowSave(row.id) && (
-                      <Button
-                        size="sm"
-                        className="gap-2"
-                        onClick={() => saveRow(row.id)}
-                        disabled={isSaving}
-                        aria-label="Save row"
-                      >
-                        {isSaving ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}
-                        <span className="hidden md:inline">Zapisz</span>
-                      </Button>
-                    )}
-
-                    <Button
-                      size="sm"
-                      variant="ghost"
-                      className="gap-2"
-                      onClick={() => deleteRow(row.id)}
-                      disabled={isSaving}
-                      aria-label="Remove row"
-                    >
-                      <Trash2 className="h-4 w-4" />
-                      <span className="hidden md:inline">Usuń</span>
-                    </Button>
-                  </div>
-                </div>
-
-                {/* Voice notes panel */}
-                {isNotesOpen && (
-                  <div id={`notes-${row.id}`} className="pt-2">
-                    <VoiceNotesPanel
-                      key={rowNotesKey[row.id] || 0}
-                      observationId={session.id}
-                      playerId={row.player_id ?? undefined}
-                      observationPlayerId={row.id}
-                      title="Notatki głosowe (zawodnik)"
-                    />
-                  </div>
-                )}
-
-                {/* Text notes (inline) */}
-                <div className="pt-2">
-                  <Textarea
-                    rows={2}
-                    className="w-full"
-                    defaultValue={row.notes ?? ""}
-                    onChange={(e) => setRowDraft(row.id, { notes: e.target.value })}
-                    placeholder="Notatki do tego zawodnika…"
-                    aria-label="Player notes"
-                  />
-                </div>
+      return (
+        <article
+          key={row.id}
+          className={`rounded-xl border bg-card p-3 sm:p-4 shadow-sm transition-all hover:shadow-md ${isDirty ? "ring-1 ring-amber-400/40" : ""}`}
+        >
+          {/* Header */}
+          <div className="flex items-start gap-3">
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img
+              src={p?.image_url || FALLBACK_SVG}
+              alt={p?.full_name || "Player"}
+              className="h-14 w-14 rounded-lg object-cover"
+            />
+            <div className="min-w-0 flex-1">
+              <div className="flex items-center gap-2">
+                <h3 className="truncate text-sm font-semibold">{p?.full_name ?? "(unknown)"}</h3>
+                {isDirty && <span className="h-2 w-2 rounded-full bg-amber-500" title="Unsaved changes" />}
               </div>
-            )
-          })}
 
-          {!rows.length && (
-            <div className="rounded-md bg-muted/30 px-3 py-4 text-center text-xs text-muted-foreground">
-              Brak zawodników. Użyj wyszukiwarki lub Quick add.
+              <div className="mt-1 flex flex-wrap items-center gap-2 text-[11px] text-muted-foreground">
+                {row.player_id && <span className="rounded bg-muted/60 px-1.5 py-0.5">Players</span>}
+                {row.player_entry_id && <span className="rounded bg-muted/60 px-1.5 py-0.5">Entry</span>}
+                {p?.transfermarkt_url && (
+                  <a
+                    href={p.transfermarkt_url}
+                    target="_blank"
+                    rel="noreferrer"
+                    className="inline-flex items-center gap-0 underline hover:text-foreground"
+                  >
+                    TM <ExternalLink className="h-3.5 w-3.5" />
+                  </a>
+                )}
+                <span className="ml-auto inline-flex items-center gap-2">
+                  <span className="inline-flex items-center gap-0" title="Tekst">
+                    <FileText className="h-3.5 w-3.5" /> {textNoteForRow}
+                  </span>
+                  <span className="inline-flex items-center gap-0" title="Głos">
+                    <Mic className="h-3.5 w-3.5" /> {voiceCountForRow}
+                  </span>
+                </span>
+              </div>
+            </div>
+          </div>
+
+          {/* Primary controls */}
+          <div className="mt-3 grid grid-cols-1 gap-3">
+            {/* Minutes stepper */}
+            <div className="flex items-center justify-between rounded-lg bg-muted/40 px-2 py-1.5">
+              <span className="text-xs text-muted-foreground">Minuty</span>
+              <div className="flex items-center gap-1">
+                <Button size="icon" variant="ghost" className="h-8 w-8" onClick={() => step(-5)} aria-label="-5">
+                  <Minus className="h-4 w-4" />
+                </Button>
+                <Input
+                  inputMode="numeric"
+                  type="number"
+                  min={0}
+                  className="h-8 w-[86px] text-center"
+                  value={minutes}
+                  onChange={(e) => setRowDraft(row.id, { minutes_watched: Number(e.target.value || 0) })}
+                  aria-label="Minutes watched"
+                />
+                <Button size="icon" variant="ghost" className="h-8 w-8" onClick={() => step(+5)} aria-label="+5">
+                  <Plus className="h-4 w-4" />
+                </Button>
+              </div>
+            </div>
+
+            {/* Overall rating + voice */}
+            <div className="flex flex-wrap items-center justify-between gap-2 rounded-lg bg-muted/40 px-2 py-2">
+              <div className="flex items-center gap-2">
+                <span className="text-xs text-muted-foreground">Ocena ogólna</span>
+                <Rate5 value={currentOverall} onChange={(n) => setRowDraft(row.id, { rating: n })} ariaLabel="Overall rating" />
+              </div>
+              <div className="flex items-center gap-2">
+                <InlineRecorder
+                  observationId={session.id}
+                  playerId={row.player_id ?? undefined}
+                  observationPlayerId={row.id}
+                  onSaved={() => {
+                    toggleRowNotes(row.id, true)
+                    setRowNotesKey((m) => ({ ...m, [row.id]: (m[row.id] || 0) + 1 }))
+                  }}
+                />
+                <Button
+                  size="sm"
+                  variant={isNotesOpen ? "secondary" : "outline"}
+                  className="gap-2"
+                  onClick={() => toggleRowNotes(row.id)}
+                  aria-expanded={isNotesOpen}
+                  aria-controls={`voice-${row.id}`}
+                >
+                  <Mic className="h-4 w-4" />
+                  <span>Voice ({voiceCountForRow})</span>
+                </Button>
+              </div>
+            </div>
+          </div>
+
+          {/* Sub-ratings */}
+          <div className="mt-3 grid grid-cols-2 gap-x-4 gap-y-3 sm:grid-cols-2">
+            <div className="grid gap-1">
+              <span className="text-[11px] text-muted-foreground">Ofensywa</span>
+              <Rate5 value={curOff} onChange={(n) => setRowDraft(row.id, { offense_rating: n })} ariaLabel="Ofensywa" />
+            </div>
+            <div className="grid gap-1">
+              <span className="text-[11px] text-muted-foreground">Defensywa</span>
+              <Rate5 value={curDef} onChange={(n) => setRowDraft(row.id, { defense_rating: n })} ariaLabel="Defensywa" />
+            </div>
+            <div className="grid gap-1">
+              <span className="text-[11px] text-muted-foreground">Technika</span>
+              <Rate5 value={curTec} onChange={(n) => setRowDraft(row.id, { technique_rating: n })} ariaLabel="Technika" />
+            </div>
+            <div className="grid gap-1">
+              <span className="text-[11px] text-muted-foreground">Motoryka</span>
+              <Rate5 value={curMot} onChange={(n) => setRowDraft(row.id, { motor_rating: n })} ariaLabel="Motoryka" />
+            </div>
+          </div>
+
+          {/* Text notes */}
+          <div className="mt-3">
+            <Textarea
+              rows={2}
+              className="w-full resize-y"
+              defaultValue={row.notes ?? ""}
+              onChange={(e) => setRowDraft(row.id, { notes: e.target.value })}
+              placeholder="Notatki do tego zawodnika…"
+              aria-label="Player notes"
+            />
+          </div>
+
+          {/* Voice notes panel */}
+          {isNotesOpen && (
+            <div id={`voice-${row.id}`} className="mt-3 overflow-x-auto rounded-lg border">
+              <VoiceNotesPanel
+                key={rowNotesKey[row.id] || 0}
+                observationId={session.id}
+                playerId={row.player_id ?? undefined}
+                observationPlayerId={row.id}
+                title="Notatki głosowe (zawodnik)"
+              />
             </div>
           )}
-        </div>
-      </section>
+
+          {/* Actions toolbar */}
+          <div className="mt-3 flex flex-wrap items-center justify-end gap-1.5">
+            {showRowSave(row.id) && (
+              <Button
+                size="sm"
+                onClick={() => saveRow(row.id)}
+                disabled={isSaving}
+                className="gap-2"
+                aria-label="Save row"
+              >
+                {isSaving ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}
+                Zapisz
+              </Button>
+            )}
+            <Button
+              size="sm"
+              variant="ghost"
+              className="gap-2"
+              onClick={() => deleteRow(row.id)}
+              disabled={isSaving}
+              aria-label="Remove row"
+            >
+              <Trash2 className="h-4 w-4" />
+              Usuń
+            </Button>
+          </div>
+        </article>
+      )
+    })}
+
+    {!rows.length && (
+      <div className="col-span-full rounded-md bg-muted/30 px-3 py-4 text-center text-xs text-muted-foreground">
+        Brak zawodników. Użyj wyszukiwarki lub Quick add.
+      </div>
+    )}
+  </div>
+</section>
+
 
       {/* ---------- Quick Add Player Dialog ---------- */}
       <Dialog open={quickOpen} onOpenChange={setQuickOpen}>

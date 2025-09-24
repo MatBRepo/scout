@@ -46,7 +46,7 @@ const rows: Row[] = (data ?? []).map((r: any) => r.players?.[0]).filter(Boolean)
 
 
   return (
-    <div className="p-4 md:p-8">
+    <div className="">
       <MyPlayersClient rows={rows} />
     </div>
   )
