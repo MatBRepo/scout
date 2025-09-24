@@ -1,12 +1,10 @@
-// src/components/nav/AppSidebar.tsx
 'use client'
 
 import React, {useEffect, useState, useCallback} from 'react'
 import Image from 'next/image'
 
-import {Link, usePathname, getPathname} from '@/i18n/navigation'
+import {Link, usePathname} from '@/i18n/navigation'
 import {useTranslations, useLocale} from 'next-intl'
-import {routing, isLocale, type Locale} from '@/i18n/routing'
 
 import {createClient} from '@/lib/supabase/browser'
 import {cn} from '@/lib/utils'
@@ -20,7 +18,7 @@ import {
   UserCircle2, Compass, PlusCircle,
   Shield, Users, ListChecks, Database,
   Bell, UserRound, Settings, LogOut,
-  Binoculars, Table,
+  Binoculars, Table
 } from 'lucide-react'
 
 import {
@@ -29,7 +27,7 @@ import {
   DropdownMenuContent,
   DropdownMenuItem,
   DropdownMenuLabel,
-  DropdownMenuSeparator,
+  DropdownMenuSeparator
 } from '@/components/ui/dropdown-menu'
 import {Button} from '@/components/ui/button'
 
@@ -79,7 +77,7 @@ function ThemeToggle({className}: {className?: string}) {
 
 /* ---------------- Reusable Nav Item (locale-aware active) ---------------- */
 function NavItem({
-  href, label, icon, onClick, collapsed = false,
+  href, label, icon, onClick, collapsed = false
 }: {
   href: string
   label: string
@@ -88,15 +86,15 @@ function NavItem({
   collapsed?: boolean
 }) {
   const pathname = usePathname()
-  const raw = useLocale()
-  const locale: Locale = isLocale(raw) ? raw : routing.defaultLocale
+  const locale = useLocale() as 'en' | 'pl'
 
-  const localizedHref = getPathname({href, locale})
-  const active = pathname === localizedHref || pathname.startsWith(localizedHref + '/')
+  // Normalize current path by removing a leading /en or /pl to compare against unprefixed hrefs
+  const normalized = (pathname || '/').replace(/^\/(en|pl)(?=\/|$)/, '') || '/'
+  const active = normalized === href || normalized.startsWith(href + '/')
 
   return (
     <Link
-      href={href} // unprefixed; Link will inject /en or /pl
+      href={href} // our Link wrapper will prefix the locale automatically
       onClick={onClick}
       className={cn(
         'group flex items-center gap-2 rounded-xl px-3 py-2 text-sm transition',
@@ -104,7 +102,7 @@ function NavItem({
         active ? 'bg-primary/10 text-primary font-semibold' : 'text-muted-foreground hover:bg-muted'
       )}
       title={collapsed ? label : undefined}
-      aria-label={label}
+      aria-label={`${label} (${locale})`}
     >
       <span className={cn('grid place-items-center rounded-md p-1', active ? 'text-primary' : 'text-muted-foreground')}>
         {icon}
@@ -149,7 +147,7 @@ type RecentItem = { id: string; title: string; href?: string; ts?: string }
 
 function NotificationsDropdown({
   recent,
-  collapsed,
+  collapsed
 }: {
   recent: RecentItem[]
   collapsed: boolean
@@ -184,7 +182,7 @@ function NotificationsDropdown({
               <Link href={r.href} className="w-full">
                 <div className="flex flex-col">
                   <span className="text-sm">
-                    {t('recent.observation', {title: r.title || t('ui.na')})}
+                    {t('recent.observation', {title: r.title || t('misc.untitled')})}
                   </span>
                   {r.ts && <span className="text-[11px] text-muted-foreground">{r.ts}</span>}
                 </div>
@@ -192,7 +190,7 @@ function NotificationsDropdown({
             ) : (
               <div className="flex flex-col">
                 <span className="text-sm">
-                  {t('recent.observation', {title: r.title || t('ui.na')})}
+                  {t('recent.observation', {title: r.title || t('misc.untitled')})}
                 </span>
                 {r.ts && <span className="text-[11px] text-muted-foreground">{r.ts}</span>}
               </div>
@@ -212,7 +210,7 @@ function AccountDropdown({
   avatarUrl,
   role,
   canDiscover,
-  onOpenSettings,
+  onOpenSettings
 }: {
   collapsed: boolean
   loading: boolean
@@ -366,7 +364,7 @@ export function AppSidebar() {
         id: `sess-${row.id}`,
         title: row.title || '',
         href: `/scout/observations/${row.id}`,
-        ts: row.created_at ? new Date(row.created_at).toLocaleString() : undefined,
+        ts: row.created_at ? new Date(row.created_at).toLocaleString() : undefined
       }))
       setRecent(items)
       setLoadingAcct(false)
@@ -495,7 +493,7 @@ export function AppSidebar() {
                 <p className="text-xs text-muted-foreground">{t('brand.subtitle')}</p>
               </div>
             )}
-            {/* top toggles removed */}
+            {/* removed top LanguageToggle & ThemeToggle */}
           </div>
 
           {ScoutBlock}
@@ -524,7 +522,7 @@ export function AppSidebar() {
                   <X className="h-5 w-5" />
                 </button>
               </div>
-              {/* top toggles removed in mobile header */}
+              {/* removed top toggles from mobile header */}
               <Divider />
               {ScoutBlock}
               {AdminBlock}

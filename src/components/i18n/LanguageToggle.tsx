@@ -2,7 +2,7 @@
 'use client'
 
 import {useLocale} from 'next-intl'
-import {usePathname, useRouter, useSearchParams} from '@/i18n/navigation'
+import {usePathname, useRouter} from '@/i18n/navigation'
 import {cn} from '@/lib/utils'
 
 export default function LanguageToggle({
@@ -10,20 +10,18 @@ export default function LanguageToggle({
   className
 }: {collapsed?: boolean; className?: string}) {
   const locale = useLocale() as 'en' | 'pl'
-  const pathname = usePathname()
+  const pathname = usePathname() ?? '/'
   const router = useRouter()
-  const search = useSearchParams()
 
   function switchTo(next: 'en' | 'pl') {
-    const base = pathname?.replace(/^\/(en|pl)(?=\/|$)/, '') || '/'
-    const qs = search?.toString()
-    const url = `/${next}${base}${qs ? `?${qs}` : ''}`
+    const base = pathname.replace(/^\/(en|pl)(?=\/|$)/, '') || '/'
+    const qs = typeof window !== 'undefined' ? window.location.search : ''
+    const url = `/${next}${base}${qs}`
 
-    // Make sure SSR sees it too:
+    // ensure SSR picks it up too
     document.cookie = `NEXT_LOCALE=${next}; Path=/; Max-Age=31536000`
 
     router.push(url)
-    // Force server components (layout with NextIntlClientProvider) to re-render:
     router.refresh()
   }
 
