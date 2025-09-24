@@ -1,21 +1,33 @@
 // middleware.ts
 import {NextRequest, NextResponse} from 'next/server'
 import {createServerClient, type CookieOptions} from '@supabase/ssr'
-import createIntlMiddleware from 'next-intl/middleware'
+import createMiddleware from 'next-intl/middleware'
 import {routing} from '@/i18n/routing'
-
-const handleI18nRouting = createIntlMiddleware(routing, {localeDetection: false})
 
 export const config = { matcher: ['/((?!api|_next|.*\\..*).*)'] }
 
-const PUBLIC_PATHS = new Set(['/', '/login', '/auth/callback', '/forgot-password', '/reset-password', '/signup'])
+// Public routes (use *unprefixed* paths here; we strip the locale below)
+const PUBLIC = new Set([
+  '/',
+  '/login',
+  '/auth/callback',
+  '/forgot-password',
+  '/reset-password',
+  '/signup'
+])
 
 const stripLocale = (p: string) => p.replace(/^\/(en|pl)(?=\/|$)/, '') || '/'
-const getLocaleFromPath = (p: string): 'en'|'pl' => (p.match(/^\/(en|pl)(?=\/|$)/)?.[1] as any) ?? 'en'
+const getLocaleFromPath = (p: string): 'en' | 'pl' =>
+  (p.match(/^\/(en|pl)(?=\/|$)/)?.[1] as 'en' | 'pl') ?? 'en'
+
+// NOTE: With next-intl v3, just pass *one* arg (routing or config object).
+const handleI18nRouting = createMiddleware(routing)
 
 export async function middleware(req: NextRequest) {
+  // Let next-intl normalize /en|pl prefixes & set NEXT_LOCALE cookie
   const res = handleI18nRouting(req)
 
+  // Attach Supabase cookie helpers to the same response
   const supabase = createServerClient(
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
     process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
@@ -23,16 +35,19 @@ export async function middleware(req: NextRequest) {
       cookies: {
         getAll: () => req.cookies.getAll(),
         setAll: (cookies: {name: string; value: string; options: CookieOptions}[]) => {
-          cookies.forEach(({name, value, options}) => res.cookies.set({name, value, ...options}))
+          cookies.forEach(({name, value, options}) =>
+            res.cookies.set({name, value, ...options})
+          )
         }
       }
     }
   )
 
+  // Auth gate on *unprefixed* path
   const pathname = req.nextUrl.pathname
   const rest = stripLocale(pathname)
   const locale = getLocaleFromPath(pathname)
-  const isPublic = PUBLIC_PATHS.has(rest)
+  const isPublic = PUBLIC.has(rest)
 
   const {data: {user}} = await supabase.auth.getUser()
 

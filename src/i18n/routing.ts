@@ -4,6 +4,5 @@ import {defineRouting} from 'next-intl/routing'
 export const routing = defineRouting({
   locales: ['en', 'pl'],
   defaultLocale: 'en',
-  // Force explicit prefix so /pl/... is always honored
-  localePrefix: 'always'
+  localePrefix: 'always' // IMPORTANT: /en/... and /pl/... must always be in the URL
 })

@@ -88,7 +88,9 @@ function NavItem({
 }) {
   const pathname = usePathname()
   const locale = useLocale()
+  useEffect(() => {
   console.log('locale =', locale)
+}, [locale])
   const localizedHref = getPathname({href, locale})
   const active = pathname === localizedHref || pathname.startsWith(localizedHref + '/')
 

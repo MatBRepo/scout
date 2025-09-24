@@ -4,6 +4,8 @@ import type {Metadata} from 'next'
 import {NextIntlClientProvider} from 'next-intl'
 import {getLocale, getMessages} from 'next-intl/server'
 import {cn} from '@/lib/utils'
+import { Analytics } from "@vercel/analytics/next"
+
 
 export const metadata: Metadata = {
   title: 'S4S Admin',
