@@ -76,31 +76,39 @@ export default function MyPlayersClient({ rows }: { rows: Row[] }) {
 
   // Live players list
   const [localItems, setLocalItems] = useState<Row[]>(rows ?? [])
-  useEffect(() => {
-  if (localItems.length) return; // SSR already provided rows
-  let mounted = true;
-  (async () => {
-    const { data: { user } } = await supabase.auth.getUser();
-    if (!user) return;
-    const { data: links } = await supabase
-      .from("players_scouts")
-      .select("player_id, created_at")
-      .eq("scout_id", user.id)
-      .order("created_at", { ascending: false });
-    const ids = (links ?? []).map(l => l.player_id);
-    if (!ids.length) return;
-    const { data: players } = await supabase
-      .from("players")
-      .select("id, full_name, main_position, current_club_name, current_club_country, image_url, transfermarkt_url")
-      .in("id", ids);
-    if (!mounted) return;
-    const byId = new Map((players ?? []).map(p => [p.id, p]));
-    setLocalItems(ids.map(id => byId.get(id)).filter(Boolean) as Row[]);
-  })();
-  return () => { mounted = false };
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-}, []);
+  const [loadingPlayers, setLoadingPlayers] = useState(!(rows && rows.length)) // NEW: loader for players
 
+  useEffect(() => {
+    if (localItems.length) { setLoadingPlayers(false); return } // SSR provided rows
+    let mounted = true
+    ;(async () => {
+      try {
+        setLoadingPlayers(true)
+        const { data: { user } } = await supabase.auth.getUser()
+        if (!user) { if (mounted) setLoadingPlayers(false); return }
+        const { data: links } = await supabase
+          .from("players_scouts")
+          .select("player_id, created_at")
+          .eq("scout_id", user.id)
+          .order("created_at", { ascending: false })
+        const ids = (links ?? []).map(l => l.player_id)
+        if (!ids.length) { if (mounted) setLoadingPlayers(false); return }
+        const { data: players } = await supabase
+          .from("players")
+          .select("id, full_name, main_position, current_club_name, current_club_country, image_url, transfermarkt_url")
+          .in("id", ids)
+        if (!mounted) return
+        const byId = new Map((players ?? []).map(p => [p.id, p]))
+        setLocalItems(ids.map(id => byId.get(id)).filter(Boolean) as Row[])
+      } catch (e) {
+        console.error(e)
+      } finally {
+        if (mounted) setLoadingPlayers(false)
+      }
+    })()
+    return () => { mounted = false }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
 
   // Sessions
   const [sessions, setSessions] = useState<Session[]>([])
@@ -128,7 +136,7 @@ export default function MyPlayersClient({ rows }: { rows: Row[] }) {
   const [sortKey, setSortKey] = useState<SortKey>("recent")
   const [sortDir, setSortDir] = useState<"asc" | "desc">("desc")
   const [onlyWithNotes, setOnlyWithNotes] = useState(false)
-  const [view, setView] = useState<ViewMode>("grid")
+  const [view, setView] = useState<ViewMode>("table") // DEFAULT: table
 
   /* ---------- helpers for localStorage fallback ---------- */
   const lsKey = (uid: string) => `my_players_trash_${uid}`
@@ -295,7 +303,6 @@ export default function MyPlayersClient({ rows }: { rows: Row[] }) {
       if (error) throw error
       setTrash(data as TrashItem[])
     } catch (e: any) {
-      // If table missing or no permission, fall back
       setTrashSupported(false)
       const ls = loadTrashLocal(scoutId)
       setTrash(ls)
@@ -337,7 +344,7 @@ export default function MyPlayersClient({ rows }: { rows: Row[] }) {
     }
   }
 
-  /* ---------------- Remove: move to Trash (DB or local) ---------------- */
+  /* ---------------- Remove: move to Trash ---------------- */
   async function removeFromMyPlayers(playerId: string) {
     if (!userId) return toast.error("Not signed in")
     if (removingByPlayer[playerId]) return
@@ -347,7 +354,6 @@ export default function MyPlayersClient({ rows }: { rows: Row[] }) {
     if (!ok) return
     setRemovingByPlayer(prev => ({ ...prev, [playerId]: true }))
     try {
-      // 1) Move to trash first
       const snapshot = {
         id: player.id,
         full_name: player.full_name,
@@ -370,11 +376,9 @@ export default function MyPlayersClient({ rows }: { rows: Row[] }) {
         saveTrashLocal(userId, next)
       }
 
-      // 2) Remove mapping
       const { error } = await supabase.from("players_scouts").delete().eq("player_id", playerId).eq("scout_id", userId)
       if (error) throw error
 
-      // 3) Update UI lists & maps
       setLocalItems(prev => prev.filter(p => p.id !== playerId))
       setSelectedByPlayer(({ [playerId]: _, ...rest }) => rest)
       setAddingByPlayer(({ [playerId]: __, ...rest }) => rest)
@@ -398,13 +402,11 @@ export default function MyPlayersClient({ rows }: { rows: Row[] }) {
     if (restoringByPlayer[pid]) return
     setRestoringByPlayer(prev => ({ ...prev, [pid]: true }))
     try {
-      // re-create mapping
       const { error: upErr } = await supabase
         .from("players_scouts")
         .upsert([{ player_id: pid, scout_id: userId }], { onConflict: "scout_id,player_id" })
       if (upErr) throw upErr
 
-      // remove from trash storage
       if (trashSupported) {
         const { error: delErr } = await supabase
           .from("players_scouts_trash")
@@ -419,25 +421,24 @@ export default function MyPlayersClient({ rows }: { rows: Row[] }) {
         saveTrashLocal(userId, next)
       }
 
-      // fetch minimal player row for UI (fall back to snapshot if not found)
       const { data: pr, error: prErr } = await supabase
         .from("players")
         .select("id, full_name, main_position, current_club_name, current_club_country, image_url, transfermarkt_url")
         .eq("id", pid)
         .single()
-const addRow: Row =
-  pr && !prErr
-    ? (pr as Row)
-    : {
-        id: item.snapshot?.id ?? pid,
-        full_name: item.snapshot?.full_name ?? "Player",
-        main_position: item.snapshot?.main_position ?? null,
-        current_club_name: item.snapshot?.current_club_name ?? null,
-        current_club_country: item.snapshot?.current_club_country ?? null,
-        image_url: item.snapshot?.image_url ?? null,
-        transfermarkt_url: item.snapshot?.transfermarkt_url ?? null,
-      }
 
+      const addRow: Row =
+        pr && !prErr
+          ? (pr as Row)
+          : {
+              id: item.snapshot?.id ?? pid,
+              full_name: item.snapshot?.full_name ?? "Player",
+              main_position: item.snapshot?.main_position ?? null,
+              current_club_name: item.snapshot?.current_club_name ?? null,
+              current_club_country: item.snapshot?.current_club_country ?? null,
+              image_url: item.snapshot?.image_url ?? null,
+              transfermarkt_url: item.snapshot?.transfermarkt_url ?? null,
+            }
 
       setLocalItems(prev => {
         const exists = prev.some(p => p.id === pid)
@@ -542,7 +543,7 @@ const addRow: Row =
   }, [localItems, search, onlyWithNotes, sortKey, sortDir, notesByPlayer])
 
   /* ---------------- Empty state ---------------- */
-  if (!localItems.length && !trash.length) {
+  if (!localItems.length && !trash.length && !loadingPlayers) {
     return (
       <div className="w-full space-y-4">
         <div className="flex items-center justify-between">
@@ -563,7 +564,10 @@ const addRow: Row =
       {/* Header */}
       <div className="flex flex-col gap-3 md:flex-row md:items-end md:justify-between">
         <div>
-          <h1 className="text-2xl font-semibold">My Players</h1>
+          <div className="flex items-center gap-2">
+            <h1 className="text-2xl font-semibold">My Players</h1>
+            {loadingPlayers && <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" aria-label="Loading players" />}
+          </div>
           <div className="mt-1 flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
             <Badge variant="secondary">Players: {headerStats.totalPlayers}</Badge>
             <Badge variant="outline" className="gap-1"><FileText className="h-3 w-3" /> Notes: {headerStats.totalNotes}</Badge>
@@ -582,7 +586,7 @@ const addRow: Row =
             className="w-full sm:w-64"
             aria-label="Search my players"
           />
-          <div className="flex items-center gap-2">
+          <div className="flex flex-wrap items-center gap-2">
             <Button
               type="button"
               variant={onlyWithNotes ? "secondary" : "outline"}
@@ -643,44 +647,43 @@ const addRow: Row =
           </div>
 
           <div className="mt-3 grid gap-2 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
-{trash.map((t) => {
-  const snap = t.snapshot; // may be undefined
-  return (
-    <div key={`${t.scout_id}-${t.player_id}`} className="flex items-center gap-3 rounded-xl border p-3">
-      <PlayerAvatar src={snap?.image_url ?? null} alt={snap?.full_name ?? "Player"} />
-      <div className="min-w-0">
-        <div className="truncate text-sm font-medium">{snap?.full_name ?? t.player_id}</div>
-        <div className="truncate text-[11px] text-muted-foreground">
-          {(snap?.main_position ?? "—")}
-          {snap?.current_club_name ? ` · ${snap.current_club_name}` : ""}
-          {snap?.current_club_country ? ` (${snap.current_club_country})` : ""}
-        </div>
-        <div className="text-[11px] text-muted-foreground">
-          Removed {new Date(t.removed_at).toLocaleDateString()}
-        </div>
-      </div>
-      <div className="ml-auto flex items-center gap-2">
-        {snap?.transfermarkt_url && (
-          <Button asChild size="sm" variant="outline">
-            <a href={snap.transfermarkt_url} target="_blank" rel="noreferrer">
-              TM <ExternalLink className="ml-1 h-3 w-3" />
-            </a>
-          </Button>
-        )}
-        <Button
-          size="sm"
-          onClick={() => restoreFromTrash(t)}
-          disabled={!!restoringByPlayer[t.player_id]}
-        >
-          {restoringByPlayer[t.player_id]
-            ? (<><Loader2 className="mr-1 h-4 w-4 animate-spin" />Restoring…</>)
-            : (<><RotateCcw className="mr-1 h-4 w-4" />Restore</>)}
-        </Button>
-      </div>
-    </div>
-  )
-})}
-
+            {trash.map((t) => {
+              const snap = t.snapshot
+              return (
+                <div key={`${t.scout_id}-${t.player_id}`} className="flex items-center gap-3 rounded-xl border p-3">
+                  <PlayerAvatar src={snap?.image_url ?? null} alt={snap?.full_name ?? "Player"} />
+                  <div className="min-w-0">
+                    <div className="truncate text-sm font-medium">{snap?.full_name ?? t.player_id}</div>
+                    <div className="truncate text-[11px] text-muted-foreground">
+                      {(snap?.main_position ?? "—")}
+                      {snap?.current_club_name ? ` · ${snap.current_club_name}` : ""}
+                      {snap?.current_club_country ? ` (${snap.current_club_country})` : ""}
+                    </div>
+                    <div className="text-[11px] text-muted-foreground">
+                      Removed {new Date(t.removed_at).toLocaleDateString()}
+                    </div>
+                  </div>
+                  <div className="ml-auto flex items-center gap-2">
+                    {snap?.transfermarkt_url && (
+                      <Button asChild size="sm" variant="outline" className="hidden sm:inline-flex">
+                        <a href={snap.transfermarkt_url} target="_blank" rel="noreferrer">
+                          TM <ExternalLink className="ml-1 h-3 w-3" />
+                        </a>
+                      </Button>
+                    )}
+                    <Button
+                      size="sm"
+                      onClick={() => restoreFromTrash(t)}
+                      disabled={!!restoringByPlayer[t.player_id]}
+                    >
+                      {restoringByPlayer[t.player_id]
+                        ? (<><Loader2 className="mr-1 h-4 w-4 animate-spin" />Restoring…</>)
+                        : (<><RotateCcw className="mr-1 h-4 w-4" />Restore</>)}
+                    </Button>
+                  </div>
+                </div>
+              )
+            })}
           </div>
         </Card>
       )}
@@ -689,65 +692,120 @@ const addRow: Row =
 
       {/* TABLE VIEW */}
       {view === "table" && (
-        <div className="w-full overflow-x-auto rounded-2xl border">
+        <div className="w-full overflow-x-auto rounded-2xl border shadow-sm">
           <Table>
             <TableHeader>
-              <TableRow>
-                <TableHead className="w-[320px]">Player</TableHead>
-                <TableHead>Position</TableHead>
-                <TableHead>Club</TableHead>
-                <TableHead>Country</TableHead>
-                <TableHead className="text-right">Notes</TableHead>
-                <TableHead className="text-right">Avg</TableHead>
-                <TableHead className="text-right">Voice</TableHead>
-                <TableHead className="text-right">Obs</TableHead>
-                <TableHead className="min-w-[260px]">Add to observation</TableHead>
-                <TableHead className="min-w-[220px]">Actions</TableHead>
+              <TableRow className="whitespace-nowrap">
+                <TableHead className="min-w-[240px] sm:min-w-[320px] sticky left-0 bg-background z-10">Player</TableHead>
+                <TableHead className="hidden sm:table-cell">Position</TableHead>
+                <TableHead className="hidden md:table-cell">Club</TableHead>
+                <TableHead className="hidden lg:table-cell">Country</TableHead>
+                <TableHead className="hidden md:table-cell text-right">Notes</TableHead>
+                <TableHead className="hidden lg:table-cell text-right">Avg</TableHead>
+                <TableHead className="hidden xl:table-cell text-right">Voice</TableHead>
+                <TableHead className="hidden xl:table-cell text-right">Obs</TableHead>
+                <TableHead className="hidden md:table-cell min-w-[260px]">Add to observation</TableHead>
+                <TableHead className="min-w-[180px] sm:min-w-[220px]">Actions</TableHead>
               </TableRow>
             </TableHeader>
+
             <TableBody>
-              {filteredSorted.map((p) => {
+              {/* Loader skeleton rows */}
+              {loadingPlayers && !filteredSorted.length && (
+                Array.from({ length: 8 }).map((_, i) => (
+                  <TableRow key={`sk-${i}`} className="animate-pulse">
+                    <TableCell className="sticky left-0 bg-background z-10">
+                      <div className="flex items-center gap-3">
+                        <div className="h-16 w-16 rounded-md bg-muted" />
+                        <div className="min-w-0 flex-1">
+                          <div className="h-4 w-40 rounded bg-muted mb-2" />
+                          <div className="h-3 w-24 rounded bg-muted" />
+                        </div>
+                      </div>
+                    </TableCell>
+                    <TableCell className="hidden sm:table-cell"><div className="h-3 w-20 bg-muted rounded" /></TableCell>
+                    <TableCell className="hidden md:table-cell"><div className="h-3 w-24 bg-muted rounded" /></TableCell>
+                    <TableCell className="hidden lg:table-cell"><div className="h-3 w-16 bg-muted rounded" /></TableCell>
+                    <TableCell className="hidden md:table-cell text-right"><div className="h-3 w-8 bg-muted rounded ml-auto" /></TableCell>
+                    <TableCell className="hidden lg:table-cell text-right"><div className="h-3 w-8 bg-muted rounded ml-auto" /></TableCell>
+                    <TableCell className="hidden xl:table-cell text-right"><div className="h-3 w-8 bg-muted rounded ml-auto" /></TableCell>
+                    <TableCell className="hidden xl:table-cell text-right"><div className="h-3 w-8 bg-muted rounded ml-auto" /></TableCell>
+                    <TableCell className="hidden md:table-cell"><div className="h-9 w-56 bg-muted rounded" /></TableCell>
+                    <TableCell><div className="h-9 w-40 bg-muted rounded" /></TableCell>
+                  </TableRow>
+                ))
+              )}
+
+              {!loadingPlayers && filteredSorted.map((p) => {
                 const existsInAny = !!existingByPlayer[p.id]?.size
                 const selectedSession = selectedByPlayer[p.id] || ""
                 const existsInSelected = !!(selectedSession && existingByPlayer[p.id]?.has(selectedSession))
                 const noteAgg = notesByPlayer[p.id]
                 const removing = !!removingByPlayer[p.id]
                 const adding = !!addingByPlayer[p.id]
+
                 return (
                   <TableRow key={p.id} className="align-top">
-                    <TableCell>
-                      <div className="flex items-center gap-3">
+                    <TableCell className="sticky left-0 bg-background z-10">
+                      <div className="flex items-start gap-3">
                         <PlayerAvatar src={p.image_url} alt={p.full_name} />
                         <div className="min-w-0">
                           <div className="truncate font-medium">{p.full_name}</div>
                           <div className="truncate text-[11px] text-muted-foreground">
                             {existsInAny ? `In ${existingByPlayer[p.id]!.size} observation${existingByPlayer[p.id]!.size>1?"s":""}` : "—"}
                           </div>
-                          {noteAgg?.last?.[0] && (
-                            <div className="mt-1 text-[11px]">
-                              <span className="text-muted-foreground">
-                                {CATEGORY_LABELS[noteAgg.last[0].category] || noteAgg.last[0].category}:
-                              </span>{" "}
-                              {noteAgg.last[0].rating ?? "—"}/10
-                              {noteAgg.last[0].comment && (
-                                <span className="text-muted-foreground">
-                                  {" "}- {noteAgg.last[0].comment.slice(0, 60)}
-                                  {noteAgg.last[0].comment.length>60?"…":""}
-                                </span>
-                              )}
-                            </div>
-                          )}
+
+                          {/* Mobile-inline add to observation (since big column is hidden) */}
+                          <div className="mt-2 grid gap-2 sm:hidden">
+                            <Select
+                              value={selectedSession}
+                              onValueChange={(id) => setSelectedSession(p.id, id)}
+                              disabled={loadingSessions || adding}
+                            >
+                              <SelectTrigger className="h-9 w-full">
+                                <SelectValue placeholder={loadingSessions ? "Loading…" : "Choose session…"} />
+                              </SelectTrigger>
+                              <SelectContent>
+                                {sessions.length === 0 ? (
+                                  <div className="px-2 py-1.5 text-xs text-muted-foreground">No sessions found</div>
+                                ) : (
+                                  sessions.map(s => (
+                                    <SelectItem key={s.id} value={s.id}>
+                                      {s.match_date} {s.title ? `· ${s.title}` : ""}
+                                    </SelectItem>
+                                  ))
+                                )}
+                              </SelectContent>
+                            </Select>
+                            {existsInSelected && (
+                              <div className="inline-flex items-center gap-1 text-[12px] text-emerald-700">
+                                <CheckCircle2 className="h-3.5 w-3.5" /> Already in this observation
+                              </div>
+                            )}
+                            <Button
+                              size="sm"
+                              className="w-full"
+                              onClick={() => addToObservation(p.id)}
+                              disabled={adding || existsInSelected || !selectedSession}
+                            >
+                              {adding ? <><Loader2 className="mr-1 h-4 w-4 animate-spin" /> Adding…</> :
+                                existsInSelected ? "Already added" : <><PlusCircle className="mr-1 h-4 w-4" /> Add</>}
+                            </Button>
+                          </div>
                         </div>
                       </div>
                     </TableCell>
-                    <TableCell>{p.main_position || "—"}</TableCell>
-                    <TableCell>{p.current_club_name || "—"}</TableCell>
-                    <TableCell>{p.current_club_country || "—"}</TableCell>
-                    <TableCell className="text-right">{noteAgg?.count ?? 0}</TableCell>
-                    <TableCell className="text-right">{noteAgg?.avg ?? "—"}</TableCell>
-                    <TableCell className="text-right">{voicesByPlayer[p.id] || 0}</TableCell>
-                    <TableCell className="text-right">{existingByPlayer[p.id]?.size ?? 0}</TableCell>
-                    <TableCell>
+
+                    <TableCell className="hidden sm:table-cell">{p.main_position || "—"}</TableCell>
+                    <TableCell className="hidden md:table-cell">{p.current_club_name || "—"}</TableCell>
+                    <TableCell className="hidden lg:table-cell">{p.current_club_country || "—"}</TableCell>
+                    <TableCell className="hidden md:table-cell text-right">{noteAgg?.count ?? 0}</TableCell>
+                    <TableCell className="hidden lg:table-cell text-right">{noteAgg?.avg ?? "—"}</TableCell>
+                    <TableCell className="hidden xl:table-cell text-right">{voicesByPlayer[p.id] || 0}</TableCell>
+                    <TableCell className="hidden xl:table-cell text-right">{existingByPlayer[p.id]?.size ?? 0}</TableCell>
+
+                    {/* Desktop add to observation */}
+                    <TableCell className="hidden md:table-cell">
                       <div className="flex items-center gap-2">
                         <Select
                           value={selectedSession}
@@ -775,15 +833,16 @@ const addRow: Row =
                           disabled={adding || existsInSelected || !selectedSession}
                         >
                           {adding ? <><Loader2 className="mr-1 h-4 w-4 animate-spin" />Adding…</> :
-                           existsInSelected ? "Already in" : <><PlusCircle className="mr-1 h-4 w-4" />Add</>}
+                          existsInSelected ? "Already in" : <><PlusCircle className="mr-1 h-4 w-4" />Add</>}
                         </Button>
                       </div>
                     </TableCell>
+
                     <TableCell>
                       <div className="flex flex-wrap items-center gap-2">
                         <Button asChild size="sm"><Link href={`/scout/players/${p.id}`}>Open</Link></Button>
                         {p.transfermarkt_url && (
-                          <Button asChild size="sm" variant="outline">
+                          <Button asChild size="sm" variant="outline" className="hidden sm:inline-flex">
                             <a href={p.transfermarkt_url} target="_blank" rel="noreferrer">
                               TM <ExternalLink className="ml-1 h-3 w-3" />
                             </a>
@@ -808,7 +867,7 @@ const addRow: Row =
         </div>
       )}
 
-      {/* GRID VIEW */}
+      {/* GRID VIEW (unchanged, but remains super mobile-friendly) */}
       {view === "grid" && (
         <>
           {/* Mobile rail */}
