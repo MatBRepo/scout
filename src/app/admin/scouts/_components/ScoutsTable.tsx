@@ -200,7 +200,7 @@ export default function ScoutsTable() {
     }
     setAdding(true)
     try {
-      const res = await fetch("/api/admin/scouts/invite", {
+      const res = await fetch("/admin/scouts/invite", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
