@@ -8,10 +8,8 @@ import { Badge } from "@/components/ui/badge"
 import { toast } from "sonner"
 import {
   Search, Users, Globe, ExternalLink, Plus, Check, Filter,
-  RotateCw, RefreshCw, X, ArrowLeftRight
+  RotateCw, RefreshCw, X, ArrowLeftRight, LayoutGrid, Table as TableIcon
 } from "lucide-react"
-
-
 
 type Player = {
   id: string
@@ -25,11 +23,11 @@ type Player = {
 
 type SortKey = "newest" | "name" | "interest"
 type SyncMode = "players" | "clubs" | "competitions"
+type ViewMode = "cards" | "table"
 
 /* ---------------- Football celebration overlay ---------------- */
 
 function SoccerBallSVG(props: React.SVGProps<SVGSVGElement>) {
-  // Simple stylized soccer ball: white circle, black pentagon + patches
   return (
     <svg viewBox="0 0 64 64" aria-hidden="true" {...props}>
       <defs>
@@ -39,12 +37,7 @@ function SoccerBallSVG(props: React.SVGProps<SVGSVGElement>) {
       </defs>
       <g clipPath="url(#circle)">
         <rect width="64" height="64" fill="#fff" />
-        {/* center pentagon */}
-        <path
-          d="M32 22 l9 6 -3 10 h-12 l-3 -10 z"
-          fill="#111"
-        />
-        {/* surrounding patches (abstract, just to sell the look) */}
+        <path d="M32 22 l9 6 -3 10 h-12 l-3 -10 z" fill="#111" />
         <path d="M18 20 l7 2 -2 6 -7 -2 z" fill="#111" />
         <path d="M45 20 l7 2 -4 5 -6 -2 z" fill="#111" />
         <path d="M14 34 l6 -2 3 6 -6 3 z" fill="#111" />
@@ -65,12 +58,12 @@ function FootballCelebration({
     () =>
       Array.from({ length: count }).map((_, i) => ({
         id: i,
-        left: Math.random() * 86 + 7,                 // 7%..93% viewport width
-        delay: Math.random() * 250,                   // 0..250ms
-        scale: 0.8 + Math.random() * 0.6,             // 0.8..1.4
-        height: 90 + Math.random() * 70,              // starting apex (px)
-        drift: (Math.random() - 0.5) * 40,            // -20..20px horizontal drift
-        duration: 850 + Math.random() * 450,          // each ball's anim length
+        left: Math.random() * 86 + 7,
+        delay: Math.random() * 250,
+        scale: 0.8 + Math.random() * 0.6,
+        height: 90 + Math.random() * 70,
+        drift: (Math.random() - 0.5) * 40,
+        duration: 850 + Math.random() * 450,
       })),
     [count]
   )
@@ -86,20 +79,14 @@ function FootballCelebration({
             className="absolute block will-change-transform"
             style={{ left: `${b.left}%`, animationDelay: `${b.delay}ms` }}
           >
-            {/* ground shadow */}
             <span
               className="block absolute bottom-0 left-1/2 -translate-x-1/2 h-2 w-10 md:w-12 rounded-full bg-black/15 blur-[2px] animate-football-shadow"
-              style={{
-                animationDuration: `${b.duration}ms`,
-              }}
+              style={{ animationDuration: `${b.duration}ms` }}
             />
-            {/* the ball */}
             <SoccerBallSVG
               className="h-10 w-10 md:h-12 md:w-12 drop-shadow-sm animate-football-bounce"
               style={
                 {
-                  // per-ball “physics” via CSS custom properties
-                  // --h: base height, --dx: horizontal drift during flight, --scale: base size scaler
                   ["--h" as any]: `${b.height}px`,
                   ["--dx" as any]: `${b.drift}px`,
                   ["--ball-scale" as any]: b.scale,
@@ -111,23 +98,16 @@ function FootballCelebration({
         ))}
       </div>
 
-      {/* Scoped physics-ish animation */}
       <style jsx>{`
-        /* Bounce with energy loss + squash at impacts */
         @keyframes football-bounce-keyframes {
-          /* start on ground, fade in */
-          0%   { transform: translate(0, 0) scale(var(--ball-scale, 1))      ; opacity: 0; }
+          0%   { transform: translate(0, 0) scale(var(--ball-scale, 1)); opacity: 0; }
           6%   { opacity: 1; }
-          /* 1st jump (highest) */
           20%  { transform: translate(calc(var(--dx) * 0.25), calc(-1 * var(--h))) scale(calc(var(--ball-scale) * 1.02)); }
           32%  { transform: translate(calc(var(--dx) * 0.35), 0) scale(calc(var(--ball-scale) * 1.06), calc(var(--ball-scale) * 0.92)); }
-          /* 2nd jump */
           48%  { transform: translate(calc(var(--dx) * 0.60), calc(-0.55 * var(--h))) scale(calc(var(--ball-scale) * 1.01)); }
           58%  { transform: translate(calc(var(--dx) * 0.70), 0) scale(calc(var(--ball-scale) * 1.05), calc(var(--ball-scale) * 0.94)); }
-          /* 3rd jump */
           72%  { transform: translate(calc(var(--dx) * 0.90), calc(-0.28 * var(--h))) scale(var(--ball-scale)); }
           80%  { transform: translate(calc(var(--dx) * 1.00), 0) scale(calc(var(--ball-scale) * 1.03), calc(var(--ball-scale) * 0.96)); }
-          /* settle */
           92%  { transform: translate(calc(var(--dx) * 1.05), calc(-0.08 * var(--h))) scale(var(--ball-scale)); }
           100% { transform: translate(calc(var(--dx) * 1.10), 0) scale(var(--ball-scale)); opacity: 0; }
         }
@@ -136,7 +116,6 @@ function FootballCelebration({
           animation-timing-function: cubic-bezier(.25,.7,.3,1);
           animation-iteration-count: 1;
         }
-        /* Shadow narrows at takeoff, widens on impact */
         @keyframes football-shadow-keyframes {
           0%   { transform: scaleX(0.7); opacity: 0; }
           8%   { opacity: 1; }
@@ -154,6 +133,16 @@ function FootballCelebration({
           animation-timing-function: ease-out;
           animation-iteration-count: 1;
         }
+        /* Subtle one-time glow for the main input wrapper */
+        @keyframes glow-pulse-once {
+          0%   { box-shadow: 0 0 0 0 rgba(59,130,246,.35); }
+          40%  { box-shadow: 0 0 0 10px rgba(59,130,246,.0); }
+          80%  { box-shadow: 0 0 0 10px rgba(59,130,246,.0); }
+          100% { box-shadow: 0 0 0 0 rgba(59,130,246,.0); }
+        }
+        .animate-glow-once {
+          animation: glow-pulse-once 1.6s ease-out 1;
+        }
       `}</style>
     </>
   )
@@ -167,6 +156,7 @@ export default function DiscoverPlayersPage() {
   const [position, setPosition] = useState<string>("any")
   const [country, setCountry] = useState<string>("")
   const [sort, setSort] = useState<SortKey>("newest")
+  const [view, setView] = useState<ViewMode>("cards")
 
   // data
   const [page, setPage] = useState(1)
@@ -433,13 +423,6 @@ export default function DiscoverPlayersPage() {
     return map[key]
   }
 
-  const activeFilters = [
-    ...(search ? [{ label: `Search: "${search}"`, clear: () => setSearch("") }] : []),
-    ...(position !== "any" ? [{ label: `Pos: ${position}`, clear: () => setPosition("any") }] : []),
-    ...(country ? [{ label: `Country: ${country}`, clear: () => setCountry("") }] : []),
-    ...(sort !== "newest" ? [{ label: `Sort: ${sort}`, clear: () => setSort("newest") }] : []),
-  ]
-
   useEffect(() => {
     return () => {
       if (celebrateTimer.current) {
@@ -452,66 +435,104 @@ export default function DiscoverPlayersPage() {
   return (
     <div className="space-y-6">
       {/* Toolbar */}
-      <div className="flex flex-col gap-3 md:flex-row md:items-center">
-        <div className="flex flex-wrap items-center gap-2">
-          {/* Search */}
-          <div className="relative w-full sm:w-auto sm:min-w-[280px] flex-1">
-            <Search className="absolute left-2 top-2.5 h-4 w-4 text-muted-foreground" />
-            <Input
-              className="pl-8"
-              placeholder="Search player name…"
-              value={search}
-              onChange={(e) => setSearch(e.target.value)}
-              onKeyDown={(e) => { if (e.key === "Enter") { setPage(1); fetchPage(true) } }}
-            />
-            {search && (
-              <button
-                aria-label="Clear search"
-                className="absolute right-2 top-2.5 rounded p-1 hover:bg-muted"
-                onClick={() => setSearch("")}
-              >
-                <X className="h-4 w-4 text-muted-foreground" />
-              </button>
-            )}
-          </div>
-
-          {/* Country */}
+      <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
+        {/* Left cluster: search + filters */}
+        <div className="flex w-full flex-col gap-3">
+          {/* Main Search / Add input – highlighted */}
           <div className="relative">
-            <Globe className="absolute left-2 top-2.5 h-4 w-4 text-muted-foreground" />
-            <Input
-              className="pl-8 w-40"
-              placeholder="Country"
-              value={country}
-              onChange={(e) => setCountry(e.target.value)}
-            />
+            {/* halo wrapper */}
+            <div className="animate-glow-once rounded-lg bg-gradient-to-r from-primary/30 via-primary/10 to-emerald-400/30 p-[1.5px] focus-within:from-primary/50 focus-within:to-emerald-400/50">
+              <div className="relative rounded-[9px] bg-background">
+                <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" aria-hidden="true" />
+                <Input
+                  className="pl-9 file:text-foreground placeholder:text-muted-foreground selection:bg-primary selection:text-primary-foreground dark:bg-input/30 border-input h-10 w-full min-w-0 rounded-md border bg-transparent px-3 py-2 text-base shadow-xs transition-[color,box-shadow] outline-none disabled:pointer-events-none disabled:cursor-not-allowed disabled:opacity-50 md:text-sm focus-visible:border-ring focus-visible:ring-ring/50 focus-visible:ring-[3px] aria-invalid:ring-destructive/20 dark:aria-invalid:ring-destructive/40 aria-invalid:border-destructive"
+                  placeholder="Search player name…"
+                  value={search}
+                  onChange={(e) => setSearch(e.target.value)}
+                  onKeyDown={(e) => { if (e.key === "Enter") { setPage(1); fetchPage(true) } }}
+                  aria-label="Search or add player"
+                />
+                {/* mini floating label */}
+                <span className="pointer-events-none absolute -top-2.5 left-3 rounded-full bg-primary px-2 py-0.5 text-[10px] font-medium text-primary-foreground shadow-sm">
+                  Search / Add
+                </span>
+              </div>
+            </div>
+
+            {/* helper row under input on small screens */}
+            <div className="mt-1 flex flex-wrap items-center gap-2 text-[11px] text-muted-foreground">
+              Press <kbd className="rounded border px-1.5 py-0.5 text-[10px]">Enter</kbd> to search · Use <em>Synchronize</em> to import from Transfermarkt
+            </div>
           </div>
 
-          {/* Sort segmented */}
+          {/* Filters row */}
+          <div className="flex flex-wrap items-center gap-2">
+            {/* Country */}
+            <div className="relative">
+              <Globe className="absolute left-2 top-2.5 h-4 w-4 text-muted-foreground" aria-hidden="true" />
+              <Input
+                className="pl-8 w-40"
+                placeholder="Country"
+                value={country}
+                onChange={(e) => setCountry(e.target.value)}
+              />
+            </div>
+
+            {/* Sort segmented */}
+            <div className="inline-flex items-center gap-1 rounded-md border p-1">
+              {(["newest","name","interest"] as SortKey[]).map((k) => (
+                <Button
+                  key={k}
+                  type="button"
+                  size="sm"
+                  variant={sort === k ? "default" : "ghost"}
+                  className="px-3"
+                  aria-pressed={sort === k}
+                  onClick={() => setSort(k)}
+                >
+                  {k === "newest" ? "Newest" : k === "name" ? "Name" : "Interest"}
+                </Button>
+              ))}
+            </div>
+
+            {/* Reset */}
+            <Button
+              variant="outline"
+              className="gap-2"
+              onClick={() => { setSearch(""); setPosition("any"); setCountry(""); setSort("newest") }}
+              title="Reset filters"
+            >
+              <Filter className="h-4 w-4" /> Reset
+            </Button>
+          </div>
+        </div>
+
+        {/* Right cluster: view toggle */}
+        <div className="flex items-center gap-2">
           <div className="inline-flex items-center gap-1 rounded-md border p-1">
-            {(["newest","name","interest"] as SortKey[]).map((k) => (
-              <Button
-                key={k}
-                type="button"
-                size="sm"
-                variant={sort === k ? "default" : "ghost"}
-                className="px-3"
-                aria-pressed={sort === k}
-                onClick={() => setSort(k)}
-              >
-                {k === "newest" ? "Newest" : k === "name" ? "Name" : "Interest"}
-              </Button>
-            ))}
+            <Button
+              type="button"
+              size="sm"
+              variant={view === "cards" ? "default" : "ghost"}
+              className="px-3"
+              aria-pressed={view === "cards"}
+              onClick={() => setView("cards")}
+              title="Card view"
+            >
+              <LayoutGrid className="mr-1 h-4 w-4" /> Cards
+            </Button>
+            <Button
+              type="button"
+              size="sm"
+              variant={view === "table" ? "default" : "ghost"}
+              className="px-3"
+              aria-pressed={view === "table"}
+              onClick={() => setView("table")}
+              title="Table view"
+            >
+              <TableIcon className="mr-1 h-4 w-4" /> Table
+            </Button>
           </div>
-
-          {/* Reset */}
-          <Button
-            variant="outline"
-            className="gap-2"
-            onClick={() => { setSearch(""); setPosition("any"); setCountry(""); setSort("newest") }}
-            title="Reset filters"
-          >
-            <Filter className="h-4 w-4" /> Reset
-          </Button>
         </div>
       </div>
 
@@ -543,7 +564,7 @@ export default function DiscoverPlayersPage() {
             disabled={syncing || !search.trim()}
             title="Import from Transfermarkt using current Search"
           >
-            <RefreshCw className="h-4 w-4" />
+            <RefreshCw className="h-4 w-4" aria-hidden="true" />
             {syncing ? "Synchronizing…" : "Synchronize"}
           </Button>
 
@@ -556,7 +577,7 @@ export default function DiscoverPlayersPage() {
             disabled={bulkSyncing}
             title="Sync missing Transfermarkt links for existing players"
           >
-            <RefreshCw className="h-4 w-4" />
+            <RefreshCw className="h-4 w-4" aria-hidden="true" />
             {bulkSyncing ? "Syncing Missing…" : "Sync Missing"}
           </Button>
         </div>
@@ -564,10 +585,10 @@ export default function DiscoverPlayersPage() {
 
       {/* Results header + active chips */}
       <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
-        <div className="text-sm text-muted-foreground order-2 sm:order-1">
+        <div className="order-2 text-sm text-muted-foreground sm:order-1">
           {loading ? "Loading…" : `${items.length} result${items.length === 1 ? "" : "s"}`}
         </div>
-        <div className="order-1 sm:order-2 -mx-1 overflow-x-auto no-scrollbar">
+        <div className="order-1 -mx-1 overflow-x-auto no-scrollbar sm:order-2">
           <div className="flex gap-2 px-1">
             {[
               ...(search ? [{ label: `Search: "${search}"`, clear: () => setSearch("") }] : []),
@@ -578,7 +599,7 @@ export default function DiscoverPlayersPage() {
               <Badge key={f.label} variant="secondary" className="flex items-center gap-1">
                 {f.label}
                 <button className="ml-1 rounded p-0.5 hover:bg-muted" onClick={f.clear} aria-label={`Clear ${f.label}`}>
-                  <X className="h-3.5 w-3.5" />
+                  <X className="h-3.5 w-3.5" aria-hidden="true" />
                 </button>
               </Badge>
             ))}
@@ -590,7 +611,7 @@ export default function DiscoverPlayersPage() {
       {error && (
         <Card className="p-4 border-destructive/30">
           <div className="flex items-center justify-between gap-3">
-            <div className="text-sm text-red-600 truncate">Error: {error}</div>
+            <div className="truncate text-sm text-red-600">Error: {error}</div>
             <Button size="sm" variant="outline" className="gap-2" onClick={() => fetchPage(true)} disabled={loading}>
               <RotateCw className="h-4 w-4" /> Retry
             </Button>
@@ -598,140 +619,259 @@ export default function DiscoverPlayersPage() {
         </Card>
       )}
 
-      {/* Grid */}
-      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5">
-        {/* skeletons */}
-        {loading && !hasItems &&
-          Array.from({ length: 10 }).map((_, i) => (
-            <Card key={`s-${i}`} className="p-4 rounded-2xl shadow-sm">
-              <div className="animate-pulse space-y-3">
-                <div className="h-40 w-full rounded-xl bg-muted" />
-                <div className="h-4 w-2/3 rounded bg-muted" />
-                <div className="h-3 w-1/2 rounded bg-muted" />
-                <div className="h-8 w-full rounded bg-muted" />
-              </div>
-            </Card>
-          ))
-        }
+      {/* ==== VIEW: CARDS ==== */}
+      {view === "cards" && (
+        <>
+          <div className="grid gap-4 grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5">
+            {/* skeletons */}
+            {loading && !hasItems &&
+              Array.from({ length: 10 }).map((_, i) => (
+                <Card key={`s-${i}`} className="rounded-2xl p-4 shadow-sm">
+                  <div className="animate-pulse space-y-3">
+                    <div className="h-40 w-full rounded-xl bg-muted" />
+                    <div className="h-4 w-2/3 rounded bg-muted" />
+                    <div className="h-3 w-1/2 rounded bg-muted" />
+                    <div className="h-8 w-full rounded bg-muted" />
+                  </div>
+                </Card>
+              ))
+            }
 
-        {/* No results */}
-        {!loading && !hasItems && !error && (
-          <Card className="p-8 rounded-2xl shadow-sm col-span-full text-center">
-            <div className="text-lg font-medium mb-1">No players found</div>
-            <div className="text-sm text-muted-foreground mb-4">
-              {search.trim()
-                ? <>No results for <span className="font-medium">&ldquo;{search}&rdquo;</span>. You can import this player from Transfermarkt.</>
-                : <>Try adjusting your filters or search query.</>}
-            </div>
-            <div className="flex flex-wrap items-center justify-center gap-2">
-              <Button
-                variant="outline"
-                onClick={() => { setSearch(""); setPosition("any"); setCountry(""); setSort("newest") }}
-                className="gap-2"
-              >
-                <Filter className="h-4 w-4" /> Reset filters
-              </Button>
-              <Button
-                onClick={syncFromTransfermarkt}
-                disabled={!search.trim() || syncing}
-                className="gap-2"
-                title="Import this player from Transfermarkt using your search"
-              >
-                <RefreshCw className="h-4 w-4" />
-                {syncing ? "Synchronizing…" : `Synchronize “${search.trim() || "name"}”`}
-              </Button>
-            </div>
-          </Card>
-        )}
-
-        {visible.map((p) => {
-          const isFollowing = !!following[p.id]
-          const interestCount = interest[p.id] ?? 0
-          const isPending = !!pending[p.id]
-          const isSelected = selected.has(p.id)
-
-          return (
-            <Card key={p.id} className="p-4 rounded-2xl shadow-sm hover:shadow-md transition relative">
-              {/* Select checkbox */}
-              <label className="absolute left-2 top-2 z-10 inline-flex items-center gap-2 rounded bg-background/70 px-2 py-1 text-xs border">
-                <input
-                  type="checkbox"
-                  checked={isSelected}
-                  onChange={() => toggleSelect(p.id)}
-                  className="accent-foreground"
-                />
-                Select
-              </label>
-
-              <div className="aspect-[4/3] w-full overflow-hidden rounded-xl border bg-muted">
-                {/* eslint-disable-next-line @next/next/no-img-element */}
-                <img
-                  src={p.image_url || "/placeholder.svg"}
-                  alt={p.full_name}
-                  className="h-full w-full object-cover"
-                />
-              </div>
-
-              {/* Details */}
-              <div className="mt-3">
-                <div className="font-semibold leading-tight truncate">{p.full_name}</div>
-                <div className="text-xs text-muted-foreground truncate">
-                  {p.current_club_name ?? "Unknown club"}
-                  {p.current_club_country ? ` · ${p.current_club_country}` : ""}
+            {/* No results */}
+            {!loading && !hasItems && !error && (
+              <Card className="col-span-full rounded-2xl p-8 text-center shadow-sm">
+                <div className="mb-1 text-lg font-medium">No players found</div>
+                <div className="mb-4 text-sm text-muted-foreground">
+                  {search.trim()
+                    ? <>No results for <span className="font-medium">&ldquo;{search}&rdquo;</span>. You can import this player from Transfermarkt.</>
+                    : <>Try adjusting your filters or search query.</>}
                 </div>
-                <div className="mt-2 flex flex-wrap gap-2 items-center">
-                  {p.main_position && <Badge variant="secondary">{p.main_position}</Badge>}
-
-                  {/* Short & clear: Scouts {n} */}
-                  <Badge
-                    variant="outline"
-                    className="gap-1"
-                    title="Scouts are interested in this player"
-                  >
-                    <Users className="h-3.5 w-3.5" aria-hidden="true" />
-                    <span className="sr-only">Scouts interested: </span>
-                    Scouts {interestCount}
-                  </Badge>
-
-                  {p.transfermarkt_url && (
-                    <a
-                      href={p.transfermarkt_url}
-                      target="_blank"
-                      rel="noreferrer"
-                      className="text-xs inline-flex items-center gap-1 underline text-muted-foreground hover:text-foreground"
-                    >
-                      Transfermarkt <ExternalLink className="h-3.5 w-3.5" />
-                    </a>
-                  )}
-                </div>
-              </div>
-
-              {/* Actions */}
-              <div className="mt-3">
-                {isFollowing ? (
+                <div className="flex flex-wrap items-center justify-center gap-2">
                   <Button
                     variant="outline"
-                    className="w-full gap-2"
-                    onClick={() => unfollow(p.id)}
-                    disabled={loading || isPending}
+                    onClick={() => { setSearch(""); setPosition("any"); setCountry(""); setSort("newest") }}
+                    className="gap-2"
                   >
-                    <Check className="h-4 w-4" /> In My Players — Remove
+                    <Filter className="h-4 w-4" /> Reset filters
                   </Button>
-                ) : (
                   <Button
-                    className="w-full gap-2"
-                    onClick={() => follow(p.id)}
-                    disabled={loading || isPending}
-                    aria-live="polite"
+                    onClick={syncFromTransfermarkt}
+                    disabled={!search.trim() || syncing}
+                    className="gap-2"
+                    title="Import this player from Transfermarkt using your search"
                   >
-                    <Plus className="h-4 w-4" /> {isPending ? "Adding…" : "Add to My Players"}
+                    <RefreshCw className="h-4 w-4" />
+                    {syncing ? "Synchronizing…" : `Synchronize “${search.trim() || "name"}”`}
                   </Button>
-                )}
-              </div>
-            </Card>
-          )
-        })}
-      </div>
+                </div>
+              </Card>
+            )}
+
+            {visible.map((p) => {
+              const isFollowing = !!following[p.id]
+              const interestCount = interest[p.id] ?? 0
+              const isPending = !!pending[p.id]
+              const isSelected = selected.has(p.id)
+
+              return (
+                <Card key={p.id} className="relative rounded-2xl p-4 shadow-sm transition hover:shadow-md">
+                  {/* Select checkbox */}
+                  <label className="absolute left-2 top-2 z-10 inline-flex items-center gap-2 rounded border bg-background/70 px-2 py-1 text-xs">
+                    <input
+                      type="checkbox"
+                      checked={isSelected}
+                      onChange={() => toggleSelect(p.id)}
+                      className="accent-foreground"
+                    />
+                    Select
+                  </label>
+
+                  <div className="aspect-[4/3] w-full overflow-hidden rounded-xl border bg-muted">
+                    {/* eslint-disable-next-line @next/next/no-img-element */}
+                    <img
+                      src={p.image_url || "/placeholder.svg"}
+                      alt={p.full_name}
+                      className="h-full w-full object-cover"
+                    />
+                  </div>
+
+                  {/* Details */}
+                  <div className="mt-3">
+                    <div className="truncate font-semibold leading-tight">{p.full_name}</div>
+                    <div className="truncate text-xs text-muted-foreground">
+                      {p.current_club_name ?? "Unknown club"}
+                      {p.current_club_country ? ` · ${p.current_club_country}` : ""}
+                    </div>
+                    <div className="mt-2 flex flex-wrap items-center gap-2">
+                      {p.main_position && <Badge variant="secondary">{p.main_position}</Badge>}
+                      <Badge variant="outline" className="gap-1" title="Scouts are interested in this player">
+                        <Users className="h-3.5 w-3.5" aria-hidden="true" />
+                        <span className="sr-only">Scouts interested: </span>
+                        Scouts {interestCount}
+                      </Badge>
+                      {p.transfermarkt_url && (
+                        <a
+                          href={p.transfermarkt_url}
+                          target="_blank"
+                          rel="noreferrer"
+                          className="inline-flex items-center gap-1 text-xs underline text-muted-foreground hover:text-foreground"
+                        >
+                          Transfermarkt <ExternalLink className="h-3.5 w-3.5" />
+                        </a>
+                      )}
+                    </div>
+                  </div>
+
+                  {/* Actions */}
+                  <div className="mt-3">
+                    {isFollowing ? (
+                      <Button
+                        variant="outline"
+                        className="w-full gap-2"
+                        onClick={() => unfollow(p.id)}
+                        disabled={loading || isPending}
+                      >
+                        <Check className="h-4 w-4" /> In My Players — Remove
+                      </Button>
+                    ) : (
+                      <Button
+                        className="w-full gap-2"
+                        onClick={() => follow(p.id)}
+                        disabled={loading || isPending}
+                        aria-live="polite"
+                      >
+                        <Plus className="h-4 w-4" /> {isPending ? "Adding…" : "Add to My Players"}
+                      </Button>
+                    )}
+                  </div>
+                </Card>
+              )
+            })}
+          </div>
+        </>
+      )}
+
+      {/* ==== VIEW: TABLE ==== */}
+      {view === "table" && (
+        <div className="-mx-2 overflow-x-auto sm:mx-0">
+          <table className="min-w-[900px] w-full border-collapse">
+            <thead className="sticky top-0 z-10 bg-background">
+              <tr className="border-b">
+                <th className="px-2 py-2 text-left text-xs font-medium text-muted-foreground">Select</th>
+                <th className="px-2 py-2 text-left text-xs font-medium text-muted-foreground">Player</th>
+                <th className="px-2 py-2 text-left text-xs font-medium text-muted-foreground">Position</th>
+                <th className="px-2 py-2 text-left text-xs font-medium text-muted-foreground">Club</th>
+                <th className="px-2 py-2 text-left text-xs font-medium text-muted-foreground">Country</th>
+                <th className="px-2 py-2 text-left text-xs font-medium text-muted-foreground">Interest</th>
+                <th className="px-2 py-2 text-left text-xs font-medium text-muted-foreground">Transfermarkt</th>
+                <th className="px-2 py-2 text-right text-xs font-medium text-muted-foreground">Actions</th>
+              </tr>
+            </thead>
+            <tbody>
+              {/* skeleton rows */}
+              {loading && !hasItems && Array.from({ length: 6 }).map((_, i) => (
+                <tr key={`sk-${i}`} className="border-b">
+                  <td className="px-2 py-3"><div className="h-4 w-4 rounded bg-muted" /></td>
+                  <td className="px-2 py-3">
+                    <div className="flex items-center gap-3">
+                      <div className="h-10 w-10 rounded bg-muted" />
+                      <div className="h-4 w-40 rounded bg-muted" />
+                    </div>
+                  </td>
+                  <td className="px-2 py-3"><div className="h-4 w-16 rounded bg-muted" /></td>
+                  <td className="px-2 py-3"><div className="h-4 w-24 rounded bg-muted" /></td>
+                  <td className="px-2 py-3"><div className="h-4 w-20 rounded bg-muted" /></td>
+                  <td className="px-2 py-3"><div className="h-4 w-12 rounded bg-muted" /></td>
+                  <td className="px-2 py-3"><div className="h-4 w-16 rounded bg-muted" /></td>
+                  <td className="px-2 py-3 text-right"><div className="ml-auto h-8 w-24 rounded bg-muted" /></td>
+                </tr>
+              ))}
+
+              {!loading && !hasItems && !error && (
+                <tr>
+                  <td colSpan={8} className="px-2 py-6 text-center text-sm text-muted-foreground">
+                    No players found. Adjust filters or use <em>Synchronize</em> to import from Transfermarkt.
+                  </td>
+                </tr>
+              )}
+
+              {visible.map((p) => {
+                const isFollowing = !!following[p.id]
+                const interestCount = interest[p.id] ?? 0
+                const isPending = !!pending[p.id]
+                const isSelected = selected.has(p.id)
+
+                return (
+                  <tr key={p.id} className="border-b hover:bg-muted/40">
+                    <td className="px-2 py-3 align-middle">
+                      <input
+                        type="checkbox"
+                        checked={isSelected}
+                        onChange={() => toggleSelect(p.id)}
+                        className="accent-foreground"
+                        aria-label={`Select ${p.full_name}`}
+                      />
+                    </td>
+                    <td className="px-2 py-3 align-middle">
+                      <div className="flex items-center gap-3">
+                        {/* eslint-disable-next-line @next/next/no-img-element */}
+                        <img
+                          src={p.image_url || "/placeholder.svg"}
+                          alt={p.full_name}
+                          className="h-10 w-10 rounded object-cover"
+                        />
+                        <div className="min-w-0">
+                          <div className="truncate font-medium">{p.full_name}</div>
+                          <div className="truncate text-xs text-muted-foreground">
+                            {p.current_club_name ?? "Unknown club"}
+                          </div>
+                        </div>
+                      </div>
+                    </td>
+                    <td className="px-2 py-3 align-middle">{p.main_position ?? "—"}</td>
+                    <td className="px-2 py-3 align-middle">{p.current_club_name ?? "—"}</td>
+                    <td className="px-2 py-3 align-middle">{p.current_club_country ?? "—"}</td>
+                    <td className="px-2 py-3 align-middle">
+                      <Badge variant="outline" className="gap-1">
+                        <Users className="h-3.5 w-3.5" aria-hidden="true" /> {interestCount}
+                      </Badge>
+                    </td>
+                    <td className="px-2 py-3 align-middle">
+                      {p.transfermarkt_url ? (
+                        <a href={p.transfermarkt_url} target="_blank" rel="noreferrer" className="inline-flex items-center gap-1 underline">
+                          Open <ExternalLink className="h-3.5 w-3.5" />
+                        </a>
+                      ) : "—"}
+                    </td>
+                    <td className="px-2 py-3 text-right align-middle">
+                      {isFollowing ? (
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          className="gap-2"
+                          onClick={() => unfollow(p.id)}
+                          disabled={loading || isPending}
+                        >
+                          <Check className="h-4 w-4" /> In list
+                        </Button>
+                      ) : (
+                        <Button
+                          size="sm"
+                          className="gap-2"
+                          onClick={() => follow(p.id)}
+                          disabled={loading || isPending}
+                        >
+                          <Plus className="h-4 w-4" /> Add
+                        </Button>
+                      )}
+                    </td>
+                  </tr>
+                )
+              })}
+            </tbody>
+          </table>
+        </div>
+      )}
 
       {/* Load more */}
       <div className="flex justify-center">
@@ -744,7 +884,7 @@ export default function DiscoverPlayersPage() {
 
       {/* Sticky compare bar */}
       {selected.size >= 2 && (
-        <div className="fixed bottom-2 md:bottom-4 inset-x-2 md:inset-x-4 z-50">
+        <div className="fixed inset-x-2 bottom-2 z-50 md:inset-x-4 md:bottom-4">
           <Card className="p-3 shadow-lg">
             <div className="flex flex-wrap items-center gap-3">
               <div className="text-sm">
@@ -767,8 +907,8 @@ export default function DiscoverPlayersPage() {
       {compareOpen && (
         <div className="fixed inset-0 z-50">
           <div className="absolute inset-0 bg-black/60" onClick={() => setCompareOpen(false)} />
-          <div className="absolute inset-0 md:inset-x-4 md:top-8 md:bottom-8 bg-background rounded-none md:rounded-2xl shadow-2xl p-4 overflow-auto">
-            <div className="flex items-center justify-between mb-4">
+          <div className="absolute inset-0 overflow-auto bg-background p-4 md:inset-x-4 md:top-8 md:bottom-8 md:rounded-2xl md:shadow-2xl">
+            <div className="mb-4 flex items-center justify-between">
               <div className="font-semibold">Compare players</div>
               <Button variant="ghost" size="icon" onClick={() => setCompareOpen(false)} aria-label="Close">
                 <X className="h-5 w-5" />
@@ -779,12 +919,12 @@ export default function DiscoverPlayersPage() {
               <div className="text-sm text-muted-foreground">Loading details…</div>
             ) : (
               <div className="w-full overflow-auto">
-                <table className="min-w-full border-separate border-spacing-y-2">
+                <table className="min-w-[700px] w-full border-separate border-spacing-y-2">
                   <thead>
                     <tr>
-                      <th className="text-left text-xs font-medium text-muted-foreground w-36">Field</th>
+                      <th className="w-36 px-2 py-2 text-left text-xs font-medium text-muted-foreground">Field</th>
                       {Array.from(selected).map((id) => (
-                        <th key={id} className="text-left text-xs font-medium text-muted-foreground pr-4">
+                        <th key={id} className="px-2 py-2 text-left text-xs font-medium text-muted-foreground">
                           {formatVal(getDetail(id, "name"))}
                         </th>
                       ))}
@@ -803,11 +943,11 @@ export default function DiscoverPlayersPage() {
                       ["Transfermarkt", "tm"],
                     ].map(([label, key]) => (
                       <tr key={key as string}>
-                        <td className="align-top text-xs text-muted-foreground py-2">{label}</td>
+                        <td className="py-2 px-2 text-xs text-muted-foreground">{label}</td>
                         {Array.from(selected).map((id) => {
                           const v = getDetail(id, key as string)
                           return (
-                            <td key={id} className="align-top text-sm py-2 pr-4">
+                            <td key={id} className="py-2 px-2 text-sm">
                               {key === "tm" && typeof v === "string" ? (
                                 <a href={v} target="_blank" rel="noreferrer" className="underline">
                                   Open
@@ -828,8 +968,8 @@ export default function DiscoverPlayersPage() {
         </div>
       )}
 
-
-
+      {/* Celebration layer */}
+      <FootballCelebration show={celebrate} />
     </div>
   )
 }
