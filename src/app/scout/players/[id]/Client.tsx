@@ -50,6 +50,12 @@ import {
   ClipboardCopy,
   Check,
   Plus,
+  User2,
+  Phone,
+  Mail,
+  ShieldCheck,
+  Trophy,
+  BarChart3,
 } from "lucide-react"
 
 const CATEGORIES = [
@@ -65,6 +71,8 @@ const CATEGORIES = [
   { key: "attitude", label: "Attitude (mentality)" },
   { key: "final_comment", label: "Final comment" },
 ] as const
+
+const NOTE_SCALE = [1, 2, 3, 4, 5, 6] as const // <- 1–6 scale
 
 type Observation = {
   id: string
@@ -164,7 +172,7 @@ export default function Client({
     })
   }
 
-  /* ---------------- Notes (sticky) ---------------- */
+  /* ---------------- Notes (horizontal, 1–6) ---------------- */
   type CatState = { id?: string; rating: number; comment: string; saving?: boolean; savedAt?: number }
   const initialNotesState: Record<string, CatState> = useMemo(() => {
     const state: Record<string, CatState> = {}
@@ -172,7 +180,7 @@ export default function Client({
       const n = notes.find(nn => nn.category === c.key)
       state[c.key] = {
         id: n?.id,
-        rating: n?.rating ?? 0,
+        rating: (n?.rating && NOTE_SCALE.includes(Math.max(1, Math.min(6, n.rating)) as any)) ? (n?.rating as number) : 0,
         comment: n?.comment ?? "",
       }
     })
@@ -180,6 +188,7 @@ export default function Client({
   }, [notes])
 
   const [catNotes, setCatNotes] = useState<Record<string, CatState>>(initialNotesState)
+  const [activeCat, setActiveCat] = useState<string>(CATEGORIES[0].key)
   const saveTimers = useRef<Record<string, any>>({})
 
   function setCat(cat: string, patch: Partial<CatState>, autosave = true) {
@@ -199,7 +208,7 @@ export default function Client({
       scout_id: userId,
       player_id: player.id,
       category: cat,
-      rating: s.rating || null,
+      rating: s.rating > 0 ? s.rating : null, // 1–6, null if 0/unset
       comment: s.comment?.trim() ? s.comment : null,
     }
     setCat(cat, { saving: true }, false)
@@ -250,7 +259,7 @@ export default function Client({
     return Math.round((ratings.reduce((a, b) => a + b, 0) / ratings.length) * 10) / 10
   }, [catNotes])
 
-  /* ---------------- Simple local “AI” suggestions ---------------- */
+  /* ---------------- Assistant (local) suggestions tuned for 1–6 ---------------- */
   const [aiBusy, setAiBusy] = useState(false)
   const [aiText, setAiText] = useState("")
   const [copied, setCopied] = useState(false)
@@ -260,9 +269,10 @@ export default function Client({
       .filter(([k]) => k !== "final_comment")
       .map(([key, s]) => ({ key, rating: s.rating ?? 0, comment: (s.comment ?? "").trim() }))
 
-    const strong = ratings.filter(r => r.rating >= 8).map(r => r.key)
-    const solid = ratings.filter(r => r.rating >= 6 && r.rating < 8).map(r => r.key)
-    const weak  = ratings.filter(r => r.rating > 0 && r.rating <= 4).map(r => r.key)
+    // Scale: 1–2 weak, 3–4 solid, 5–6 strong
+    const strong = ratings.filter(r => r.rating >= 5).map(r => r.key)
+    const solid = ratings.filter(r => r.rating >= 3 && r.rating <= 4).map(r => r.key)
+    const weak  = ratings.filter(r => r.rating > 0 && r.rating <= 2).map(r => r.key)
     const missing = ratings.filter(r => r.rating === 0 && !r.comment).map(r => r.key)
 
     const label = (k: string) => CATEGORIES.find(c => c.key === k)?.label ?? k
@@ -273,15 +283,15 @@ export default function Client({
 
     const improvements = weak.length
       ? `• **Areas to improve:** ${weak.map(label).join(", ")}.`
-      : `• **Areas to improve:** none flagged ≤4/10 yet; keep monitoring under pressure.`
+      : `• **Areas to improve:** none flagged ≤2/6 yet; keep monitoring under pressure.`
 
     const consistency = solid.length
-      ? `• **Consistent aspects (6–7/10):** ${solid.map(label).join(", ")}.`
-      : `• **Consistent aspects:** not enough categories at 6–7 to judge consistency.`
+      ? `• **Solid (3–4/6):** ${solid.map(label).join(", ")}.`
+      : `• **Solid aspects:** not enough categories at 3–4 to judge consistency.`
 
     const nextFocus = missing.length
-      ? `• **Next scouting focus:** add ratings for ${missing.map(label).join(", ")} to complete the profile.`
-      : `• **Next scouting focus:** revisit low-sample categories and collect additional game phases.`
+      ? `• **Next focus:** add ratings for ${missing.map(label).join(", ")} to complete the profile.`
+      : `• **Next focus:** revisit borderline categories and capture more sequences.`
 
     const comms =
       form.english_speaks === false || String(form.english_level || "").toUpperCase() === "A2"
@@ -290,9 +300,9 @@ export default function Client({
 
     const physical =
       (Number(form.height_cm) || 0) < 172
-        ? `• **Physical context:** below-average height — emphasize agility and timing in duels.`
+        ? `• **Physical:** below-average height — emphasize agility and timing in duels.`
         : (Number(form.height_cm) || 0) > 188
-        ? `• **Physical context:** leverage aerial ability and set-pieces given the frame.`
+        ? `• **Physical:** leverage aerial ability and set-pieces given the frame.`
         : ""
 
     const minutes = Number(form.minutes) || 0
@@ -301,9 +311,9 @@ export default function Client({
         ? `• **Exposure:** limited minutes this season; validate in 2–3 additional full matches.`
         : ""
 
-    const avgText = notesAverage == null ? "n/a" : `${notesAverage}/10 over ${notesCoverage.filled} cat.`
+    const avgText = notesAverage == null ? "n/a" : `${notesAverage}/6 across ${notesCoverage.filled} cat.`
 
-    return `**Scout summary (draft)**  
+    return `**Scout summary (draft)**
 Avg: ${avgText}
 
 ${strengths}
@@ -341,6 +351,7 @@ ${[comms, physical, exposure].filter(Boolean).join("\n")}`.trim()
   /* ---------------- Observations (right column) ---------------- */
   const [obs, setObs] = useState<Observation[]>(observations)
 
+  /* ---------------- Render ---------------- */
   return (
     <div className="w-full space-y-6">
       {/* Header */}
@@ -363,9 +374,9 @@ ${[comms, physical, exposure].filter(Boolean).join("\n")}`.trim()
               <FileText className="h-3.5 w-3.5" />
               Notes {notesCoverage.filled}/{notesCoverage.total}
             </Badge>
-            <Badge variant="outline" className="gap-1" title="Average of non-zero category ratings">
+            <Badge variant="outline" className="gap-1" title="Average of non-zero category ratings (1–6)">
               <Star className="h-3.5 w-3.5" />
-              Avg {notesAverage ?? "—"}/10
+              Avg {notesAverage ?? "—"}/6
             </Badge>
           </div>
         </div>
@@ -382,7 +393,7 @@ ${[comms, physical, exposure].filter(Boolean).join("\n")}`.trim()
         </div>
       </Card>
 
-      {/* Player information — now grouped in tabs */}
+      {/* Player information — improved tabs */}
       <Card className="mx-0 rounded-2xl p-0">
         <div className="flex items-center justify-between px-4 pt-4 md:px-6">
           <h2 className="text-lg font-semibold">Player information</h2>
@@ -391,79 +402,102 @@ ${[comms, physical, exposure].filter(Boolean).join("\n")}`.trim()
           </Button>
         </div>
 
-        <Tabs defaultValue="basic" className="mt-3">
+        <Tabs defaultValue="identity" className="mt-3">
           <div className="px-4 md:px-6">
-            <TabsList className="w-full justify-start">
-              <TabsTrigger value="basic">Basic</TabsTrigger>
-              <TabsTrigger value="contact">Contact</TabsTrigger>
-              <TabsTrigger value="details">Details</TabsTrigger>
-            </TabsList>
+            <div className="overflow-x-auto [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+              <TabsList className="min-w-max gap-1 whitespace-nowrap">
+                <TabsTrigger value="identity" className="gap-2"><User2 className="h-4 w-4" /> Basic</TabsTrigger>
+                <TabsTrigger value="club" className="gap-2"><Building2 className="h-4 w-4" /> Club</TabsTrigger>
+                <TabsTrigger value="physical" className="gap-2"><Footprints className="h-4 w-4" /> Physical</TabsTrigger>
+                <TabsTrigger value="contact" className="gap-2"><Phone className="h-4 w-4" /> Contact</TabsTrigger>
+                <TabsTrigger value="contract" className="gap-2"><ShieldCheck className="h-4 w-4" /> Contract</TabsTrigger>
+                <TabsTrigger value="stats" className="gap-2"><BarChart3 className="h-4 w-4" /> Stats</TabsTrigger>
+                <TabsTrigger value="links" className="gap-2"><Trophy className="h-4 w-4" /> Links</TabsTrigger>
+              </TabsList>
+            </div>
           </div>
 
-          {/* BASIC */}
-          <TabsContent value="basic" className="px-4 pb-4 pt-2 md:px-6">
+          {/* IDENTITY */}
+          <TabsContent value="identity" className="px-4 pb-4 pt-2 md:px-6">
             <div className="grid gap-4 md:grid-cols-3">
               <Field label="First name"><Input value={form.first_name} onChange={e=>set("first_name", e.target.value)} /></Field>
               <Field label="Last name"><Input value={form.last_name} onChange={e=>set("last_name", e.target.value)} /></Field>
               <Field label="Date of birth" icon={<Calendar className="h-4 w-4" />}>
                 <Input type="date" value={form.date_of_birth} onChange={e=>set("date_of_birth", e.target.value)} />
               </Field>
-
               <Field label="Main position"><Input value={form.main_position} onChange={e=>set("main_position", e.target.value)} placeholder="e.g. CM, ST" /></Field>
               <Field label="Dominant foot" icon={<Footprints className="h-4 w-4" />}>
                 <Input value={form.dominant_foot} onChange={e=>set("dominant_foot", e.target.value)} placeholder="left / right / both" />
               </Field>
-              <div />
-
-              <Field label="Current club" icon={<Building2 className="h-4 w-4" />}>
-                <Input value={form.current_club_name} onChange={e=>set("current_club_name", e.target.value)} />
-              </Field>
-              <Field label="Club country"><Input value={form.current_club_country} onChange={e=>set("current_club_country", e.target.value)} /></Field>
-              <Field label="League level"><Input type="number" value={form.current_club_tier} onChange={e=>set("current_club_tier", e.target.value)} /></Field>
-
-              <Field label="Height (cm)"><Input type="number" value={form.height_cm} onChange={e=>set("height_cm", e.target.value)} /></Field>
-              <Field label="Weight (kg)"><Input type="number" value={form.weight_kg} onChange={e=>set("weight_kg", e.target.value)} /></Field>
               <Field label="Country of birth" icon={<Flag className="h-4 w-4" />}>
                 <Input value={form.country_of_birth} onChange={e=>set("country_of_birth", e.target.value)} />
               </Field>
-
               <ToggleField label="EU passport" checked={form.has_eu_passport} onChange={(v)=>set("has_eu_passport", v)} />
               <ToggleField label="Speaks English" checked={form.english_speaks} onChange={(v)=>set("english_speaks", v)} />
               <Field label="English level"><Input value={form.english_level} onChange={e=>set("english_level", e.target.value)} placeholder="A2/B1/B2/C1" /></Field>
             </div>
           </TabsContent>
 
+          {/* CLUB */}
+          <TabsContent value="club" className="px-4 pb-4 pt-2 md:px-6">
+            <div className="grid gap-4 md:grid-cols-3">
+              <Field label="Current club" icon={<Building2 className="h-4 w-4" />}>
+                <Input value={form.current_club_name} onChange={e=>set("current_club_name", e.target.value)} />
+              </Field>
+              <Field label="Club country"><Input value={form.current_club_country} onChange={e=>set("current_club_country", e.target.value)} /></Field>
+              <Field label="League level"><Input type="number" value={form.current_club_tier} onChange={e=>set("current_club_tier", e.target.value)} /></Field>
+              <Field label="Coach/Club contact"><Input value={form.coach_contact} onChange={e=>set("coach_contact", e.target.value)} /></Field>
+              <Field label="Agency"><Input value={form.agency} onChange={e=>set("agency", e.target.value)} /></Field>
+            </div>
+          </TabsContent>
+
+          {/* PHYSICAL */}
+          <TabsContent value="physical" className="px-4 pb-4 pt-2 md:px-6">
+            <div className="grid gap-4 md:grid-cols-3">
+              <Field label="Height (cm)"><Input type="number" value={form.height_cm} onChange={e=>set("height_cm", e.target.value)} /></Field>
+              <Field label="Weight (kg)"><Input type="number" value={form.weight_kg} onChange={e=>set("weight_kg", e.target.value)} /></Field>
+            </div>
+          </TabsContent>
+
           {/* CONTACT */}
           <TabsContent value="contact" className="px-4 pb-4 pt-2 md:px-6">
             <div className="grid gap-4 md:grid-cols-3">
-              <Field label="Contact phone"><Input value={form.contact_phone} onChange={e=>set("contact_phone", e.target.value)} /></Field>
-              <Field label="Contact email"><Input value={form.contact_email} onChange={e=>set("contact_email", e.target.value)} /></Field>
-              <Field label="Coach/Club contact"><Input value={form.coach_contact} onChange={e=>set("coach_contact", e.target.value)} /></Field>
-
-              <Field label="Agency"><Input value={form.agency} onChange={e=>set("agency", e.target.value)} /></Field>
-              <Field label="Transfermarkt URL"><Input value={form.transfermarkt_url} onChange={e=>set("transfermarkt_url", e.target.value)} /></Field>
+              <Field label="Contact phone" icon={<Phone className="h-4 w-4" />}>
+                <Input value={form.contact_phone} onChange={e=>set("contact_phone", e.target.value)} />
+              </Field>
+              <Field label="Contact email" icon={<Mail className="h-4 w-4" />}>
+                <Input value={form.contact_email} onChange={e=>set("contact_email", e.target.value)} />
+              </Field>
               <div />
             </div>
           </TabsContent>
 
-          {/* DETAILS */}
-          <TabsContent value="details" className="px-4 pb-4 pt-2 md:px-6">
+          {/* CONTRACT */}
+          <TabsContent value="contract" className="px-4 pb-4 pt-2 md:px-6">
             <div className="grid gap-4 md:grid-cols-3">
               <Field label="Contract status"><Input value={form.contract_status} onChange={e=>set("contract_status", e.target.value)} /></Field>
               <Field label="Contract until"><Input type="date" value={form.contract_until || ""} onChange={e=>set("contract_until", e.target.value)} /></Field>
               <div />
+            </div>
+          </TabsContent>
 
+          {/* STATS */}
+          <TabsContent value="stats" className="px-4 pb-4 pt-2 md:px-6">
+            <div className="grid gap-4 md:grid-cols-3">
               <Field label="Appearances"><Input type="number" value={form.appearances} onChange={e=>set("appearances", e.target.value)} /></Field>
               <Field label="Minutes"><Input type="number" value={form.minutes} onChange={e=>set("minutes", e.target.value)} /></Field>
               <div />
-
               <Field label="Goals (last season)"><Input type="number" value={form.goals_last_season} onChange={e=>set("goals_last_season", e.target.value)} /></Field>
               <Field label="Assists (last season)"><Input type="number" value={form.assists_last_season} onChange={e=>set("assists_last_season", e.target.value)} /></Field>
               <Field label="Dribbles (last season)"><Input type="number" value={form.dribbles_last_season} onChange={e=>set("dribbles_last_season", e.target.value)} /></Field>
-
               <Field label="Injuries (last 3y)"><Input type="number" value={form.injuries_last_3y} onChange={e=>set("injuries_last_3y", e.target.value)} /></Field>
-              <div />
-              <div />
+            </div>
+          </TabsContent>
+
+          {/* LINKS */}
+          <TabsContent value="links" className="px-4 pb-4 pt-2 md:px-6">
+            <div className="grid gap-4 md:grid-cols-3">
+              <Field label="Transfermarkt URL"><Input value={form.transfermarkt_url} onChange={e=>set("transfermarkt_url", e.target.value)} /></Field>
             </div>
           </TabsContent>
         </Tabs>
@@ -471,14 +505,14 @@ ${[comms, physical, exposure].filter(Boolean).join("\n")}`.trim()
 
       {/* Notes + Observations */}
       <div className="grid gap-6 px-4 md:grid-cols-2 md:px-0">
-        {/* LEFT: Sticky Notes + AI helper */}
+        {/* LEFT: Notes + Assistant */}
         <Card className="space-y-4 rounded-2xl p-4 md:p-6">
           <div className="flex items-center justify-between">
             <h2 className="text-lg font-semibold">Scout notes</h2>
             <span className="text-xs text-muted-foreground">Only visible to you</span>
           </div>
 
-          {/* AI helper header */}
+          {/* Assistant helper */}
           <Card className="rounded-xl border bg-gradient-to-br from-amber-50 to-white p-3">
             <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
               <div className="flex items-center gap-2 text-sm font-medium">
@@ -501,70 +535,92 @@ ${[comms, physical, exposure].filter(Boolean).join("\n")}`.trim()
               className="mt-2 h-36"
               value={aiText}
               onChange={(e) => setAiText(e.target.value)}
-              placeholder="Click Generate to draft a summary of strengths, improvements and next focus…"
+              placeholder="Click Generate to draft strengths, improvements and next focus…"
               aria-live="polite"
             />
           </Card>
 
-          {/* Sticky grid */}
-          <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-2">
-            {CATEGORIES.map((cat, idx) => {
+          {/* Horizontal categories + per-category panel */}
+          <Tabs value={activeCat} onValueChange={setActiveCat} className="space-y-3">
+            {/* Scrollable category bar */}
+            <div className="overflow-x-auto [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+              <TabsList className="min-w-max gap-1 whitespace-nowrap rounded-xl">
+                {CATEGORIES.map((c) => (
+                  <TabsTrigger
+                    key={c.key}
+                    value={c.key}
+                    className="rounded-lg px-3 py-2 text-xs"
+                  >
+                    {c.label}
+                  </TabsTrigger>
+                ))}
+              </TabsList>
+            </div>
+
+            {CATEGORIES.map((cat) => {
               const s = catNotes[cat.key]
-              const tilt = idx % 2 === 0 ? "-rotate-[0deg]" : "rotate-[0deg]"
+              const isFinal = cat.key === "final_comment"
               return (
-                <div
-                  key={cat.key}
-                  className={`relative rounded-[18px] border bg-[#fffbe6] px-3 pb-3 pt-2 shadow-[0_8px_18px_rgba(0,0,0,0.08)] ${tilt}`}
-                  style={{ backgroundImage: "linear-gradient(#fff4c2,#fffbe6 16px,#fffbe6)" }}
-                >
-                  <div className="absolute -top-1 left-1/2 h-2 w-16 -translate-x-1/2 rounded-sm bg-[#f7d879]/80 shadow" />
-                  <div className="pr-7">
-                    <div className="text-[13px] font-semibold leading-tight">{cat.label}</div>
-                    <div className="mt-2 flex flex-wrap gap-1">
-                      {Array.from({ length: 11 }, (_, n) => n).map(n => (
-                        <button
-                          key={n}
-                          type="button"
-                          onClick={() => setCat(cat.key, { rating: n })}
-                          className={`h-7 min-w-[28px] rounded border px-2 text-xs transition
-                            ${s?.rating === n
-                              ? "border-primary bg-primary text-primary-foreground"
-                              : "border-amber-300 bg-white/70 hover:bg-white"
-                            }`}
-                          aria-label={`${n} out of 10`}
+                <TabsContent key={cat.key} value={cat.key}>
+                  <div className="rounded-xl border bg-card/50 p-3">
+                    <div className="flex flex-wrap items-center justify-between gap-2">
+                      <div className="text-sm font-medium">{cat.label}</div>
+                      <div className="flex items-center gap-2">
+                        {!isFinal && (
+                          <div className="inline-flex items-center gap-1 rounded-md border bg-background p-1">
+                            {NOTE_SCALE.map((n) => (
+                              <button
+                                key={n}
+                                type="button"
+                                onClick={() => setCat(cat.key, { rating: n })}
+                                className={
+                                  `h-8 min-w-[36px] rounded-md px-2 text-xs
+                                   ${s?.rating === n
+                                      ? "bg-primary text-primary-foreground"
+                                      : "bg-white hover:bg-muted border"}`
+                                }
+                                aria-label={`${n} out of 6`}
+                                aria-pressed={s?.rating === n}
+                              >
+                                {n}
+                              </button>
+                            ))}
+                          </div>
+                        )}
+                        <Button
+                          size="icon"
+                          variant="ghost"
+                          title="Delete note"
+                          onClick={() => deleteNote(cat.key)}
                         >
-                          {n}
-                        </button>
-                      ))}
+                          <Trash2 className="h-4 w-4" />
+                        </Button>
+                      </div>
                     </div>
+
+                    {!isFinal && (
+                      <p className="mt-2 text-[11px] text-muted-foreground">
+                        1 = poor · 3–4 = solid · 6 = elite
+                      </p>
+                    )}
+
                     <Textarea
-                      className="mt-2 h-[72px] resize-none border-amber-200 bg-transparent focus-visible:ring-amber-400"
-                      placeholder="Short comment…"
+                      className="mt-3 h-28 resize-none"
+                      placeholder={isFinal ? "Final comment, summary, projection…" : "Short comment…"}
                       value={s?.comment ?? ""}
                       onChange={(e) => setCat(cat.key, { comment: e.target.value })}
                     />
+
+                    <div className="mt-2 text-[11px] text-muted-foreground">
+                      {s?.saving
+                        ? (<span className="inline-flex items-center gap-1"><Loader2 className="h-3 w-3 animate-spin" /> saving…</span>)
+                        : s?.savedAt ? "saved" : "—"}
+                    </div>
                   </div>
-                  <div className="absolute right-2 top-2 flex items-center gap-1">
-                    {s?.saving ? (
-                      <span className="inline-flex items-center gap-1 text-[10px] text-amber-800">
-                        <Loader2 className="h-3 w-3 animate-spin" /> saving…
-                      </span>
-                    ) : s?.savedAt ? (
-                      <span className="text-[10px] text-amber-800">saved</span>
-                    ) : null}
-                    <button
-                      type="button"
-                      onClick={() => deleteNote(cat.key)}
-                      className="ml-1 grid h-7 w-7 place-items-center rounded-full hover:bg-amber-200/60"
-                      title="Delete note"
-                    >
-                      <Trash2 className="h-4 w-4 text-amber-800" />
-                    </button>
-                  </div>
-                </div>
+                </TabsContent>
               )
             })}
-          </div>
+          </Tabs>
         </Card>
 
         {/* RIGHT: Observations */}
@@ -700,22 +756,18 @@ function ObservationsPanel({
 
       const sess = sessions.find(s => s.id === chosenSession)
       if (sess?.match_date) {
-const { error: obsErr } = await supabase
-  .from("observations")
-  .insert({
-    scout_id: userId,
-    player_id: playerId,
-    match_date: sess.match_date,
-    competition: null,
-    opponent: null,
-    minutes_watched: null,
-    notes: null,
-  })
-
-// optional: ignore or log
-if (obsErr) {
-  console.warn("Insert observations failed:", obsErr.message)
-}
+        const { error: obsErr } = await supabase
+          .from("observations")
+          .insert({
+            scout_id: userId,
+            player_id: playerId,
+            match_date: sess.match_date,
+            competition: null,
+            opponent: null,
+            minutes_watched: null,
+            notes: null,
+          })
+        if (obsErr) console.warn("Insert observations failed:", obsErr.message)
 
         const { data } = await supabase
           .from("observations")
@@ -755,7 +807,6 @@ if (obsErr) {
         .single()
       if (error) throw error
 
-      // refresh local list
       setSessions(prev => {
         const next = [data!, ...prev]
         next.sort((a, b) => (a.match_date < b.match_date ? 1 : -1))
@@ -841,6 +892,7 @@ if (obsErr) {
               </DialogFooter>
             </DialogContent>
           </Dialog>
+
 
           <Select value={chosenSession} onValueChange={setChosenSession} disabled={adding}>
             <SelectTrigger className="h-9 w-[260px]">

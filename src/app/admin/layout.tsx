@@ -10,10 +10,12 @@ export default function AdminLayout({ children }: { children: ReactNode }) {
       <div className="flex-1 flex flex-col">
         {/* Topbar visible on all breakpoints */}
         <Topbar />
-        <main className="flex-1 p-4 md:p-8">
-          <div className="mx-auto w-full max-w-screen-2xl">{children}</div>
+        <main className="flex-1">
+          <div className="mx-auto p-4 md:p-8">{children}</div>
         </main>
       </div>
     </div>
   )
 }
+
+

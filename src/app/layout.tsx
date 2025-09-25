@@ -18,7 +18,7 @@ export default async function RootLayout({children}: {children: React.ReactNode}
     <html lang={locale} key={locale} suppressHydrationWarning>
       <body
         suppressHydrationWarning
-        className={cn('min-h-screen bg-background text-foreground antialiased')}
+        className={cn('min-h-screen bg-background text-foreground overflow-x-hidden antialiased')}
       >
         {/* key={locale} is important so the provider remounts on /en ↔ /pl */}
         <NextIntlClientProvider locale={locale} messages={messages} key={locale}>

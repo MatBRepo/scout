@@ -663,10 +663,10 @@ export default function ObservationEditor({ session: initial, rows: initialRows 
   /* ================================ RENDER ================================ */
 
   return (
-    <div className="max-w-screen-2xl mx-auto w-full space-y-8 sm:px-6">
+    <div className="max-w-screen-2xl mx-auto w-full ">
       {/* Header / Meta */}
       <section className="space-y-3">
-        <div className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
+        <div className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between pb-3">
           <div className="min-w-0 flex-1 space-y-2">
             <Input
               value={session.title ?? ""}
@@ -716,7 +716,7 @@ export default function ObservationEditor({ session: initial, rows: initialRows 
           </div>
 
           <div className="lg:w-[420px] space-y-2">
-            <div className="flex items-center justify-between rounded-md bg-muted/40 px-3 py-2">
+            <div className="flex items-center justify-between rounded-md bg-muted/40 py-2">
               <div>
                 <div className="text-sm font-medium">Tryb obserwacji</div>
                 <div className="text-[11px] text-muted-foreground">Live (stadion) / Video (TV/stream)</div>
@@ -746,8 +746,8 @@ export default function ObservationEditor({ session: initial, rows: initialRows 
       <Separator />
 
       {/* Observation voice notes */}
-      <section className="space-y-2">
-        <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+      <section className="space-y-2 py-4">
+        <div className="flex flex-col gap-2 sm:flex-row sm:items-center py-3 sm:justify-between">
           <div className="text-sm font-medium">Notatki głosowe (obserwacja)</div>
           <div className="flex items-center gap-2">
             <InlineRecorder
@@ -785,7 +785,7 @@ export default function ObservationEditor({ session: initial, rows: initialRows 
 
       {/* Add players – search + quick add */}
       <section className="space-y-2">
-        <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
+        <div className="flex flex-col gap-2 sm:flex-row sm:items-center py-3">
           <div className="relative flex-1">
             <Search className="absolute left-2 top-2.5 h-4 w-4 text-muted-foreground" aria-hidden="true" />
             <Input
@@ -797,7 +797,7 @@ export default function ObservationEditor({ session: initial, rows: initialRows 
             />
             {searching && <Loader2 className="absolute right-2 top-2.5 h-4 w-4 animate-spin text-muted-foreground" aria-hidden="true" />}
           </div>
-          <Button variant="outline" size="sm" className="gap-2" onClick={() => setQuickOpen(true)}>
+          <Button variant="outline" size="sm" className="gap-2 sm:mb-3" onClick={() => setQuickOpen(true)}>
             <Plus className="h-4 w-4" />
             Quick add player
           </Button>
@@ -858,7 +858,7 @@ export default function ObservationEditor({ session: initial, rows: initialRows 
       <Separator />
 
 {/* Players – new card UX */}
-<section className="space-y-3">
+<section className="space-y-3 pt-3">
   <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-3">
     {rows.map((row) => {
       const p = row.players ?? row.scout_player_entries

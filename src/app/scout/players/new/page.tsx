@@ -426,7 +426,7 @@ export default function NewPlayerPage() {
 
   // ===== LAYOUT =====
   return (
-    <div className="w-full p-4 md:p-8 pb-28">
+    <div className="pb-28">
       {/* Header */}
       <div className="flex items-center justify-between mb-4">
         <div>
