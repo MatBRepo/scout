@@ -92,7 +92,7 @@ function VisualTreeModal({
     >
       <DialogContent
         aria-describedby={undefined}
-        className="fixed left-1/2 top-1/2 z-50 grid h-[100dvh] w-[100vw] -translate-x-1/2 -translate-y-1/2 overflow-hidden bg-background p-0 sm:max-w-[100vw]"
+        className="fixed left-1/2 top-1/2 z-50 grid h-[100dvh] w-[100vw] -translate-x-1/2 -translate-y-1/2 overflow-hidden  p-0 sm:max-w-[100vw]"
       >
         {/* Header */}
         <div className="flex max-h-[100px] items-center justify-between border-b px-3 py-2">
@@ -900,7 +900,7 @@ export default function MyPlayersClient({ rows }: { rows: Row[] }) {
               <Table className="text-[13px] md:text-sm">
                 <TableHeader>
                   <TableRow className="whitespace-nowrap">
-                    <TableHead className="min-w-[240px] sm:min-w-[320px] sticky left-0 bg-background z-10">Player</TableHead>
+                    <TableHead className="min-w-[240px] sm:min-w-[320px] sticky left-0  z-10">Player</TableHead>
                     <TableHead className="hidden sm:table-cell">Position</TableHead>
                     <TableHead className="hidden md:table-cell">Club</TableHead>
                     <TableHead className="hidden lg:table-cell">Country</TableHead>
@@ -917,7 +917,7 @@ export default function MyPlayersClient({ rows }: { rows: Row[] }) {
                   {loadingPlayers && !filteredSorted.length && (
                     Array.from({ length: 8 }).map((_, i) => (
                       <TableRow key={`sk-${i}`} className="animate-pulse">
-                        <TableCell className="sticky left-0 bg-background z-10">
+                        <TableCell className="sticky left-0  z-10">
                           <div className="flex items-center gap-3">
                             <div className="h-16 w-16 rounded-md bg-muted" />
                             <div className="min-w-0 flex-1">
@@ -946,8 +946,8 @@ export default function MyPlayersClient({ rows }: { rows: Row[] }) {
                     const removing = !!removingByPlayer[p.id]
                     const adding = !!addingByPlayer[p.id]
                     return (
-                      <TableRow key={p.id} className="align-top">
-                        <TableCell className="sticky left-0 bg-background z-10">
+                      <TableRow key={p.id} className="align-top bg-background">
+                        <TableCell className="sticky left-0  z-10">
                           <div className="flex items-start gap-3">
                             <div className="md:shrink-0">
                               <PlayerAvatar src={p.image_url} alt={p.full_name} />
@@ -1207,7 +1207,7 @@ function PlayerCard({
         {lastNotes.length > 0 && (
           <div className="mt-3 grid gap-2">
             {lastNotes.map((n, i) => (
-              <div key={i} className="rounded-md border bg-background px-2 py-1.5">
+              <div key={i} className="rounded-md border  px-2 py-1.5">
                 <div className="flex items-center justify-between text-xs">
                   <span className="font-medium">{CATEGORY_LABELS[n.category] || n.category}</span>
                   <span className="text-muted-foreground">{n.rating ?? "—"}/10</span>

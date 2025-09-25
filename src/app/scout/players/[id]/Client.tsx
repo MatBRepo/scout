@@ -1,3 +1,4 @@
+// src/components/Client.tsx
 "use client"
 
 import Link from "next/link"
@@ -57,6 +58,7 @@ import {
   Trophy,
   BarChart3,
 } from "lucide-react"
+import { cn } from "@/lib/utils"
 
 const CATEGORIES = [
   { key: "motor", label: "Motor skills – speed, stamina" },
@@ -72,7 +74,8 @@ const CATEGORIES = [
   { key: "final_comment", label: "Final comment" },
 ] as const
 
-const NOTE_SCALE = [1, 2, 3, 4, 5, 6] as const // <- 1–6 scale
+// 1–6 scale remains the logic but UI is stars now
+const NOTE_SCALE = [1, 2, 3, 4, 5, 6] as const
 
 type Observation = {
   id: string
@@ -136,6 +139,31 @@ export default function Client({
     injuries_last_3y: player.injuries_last_3y ?? "",
     transfermarkt_url: player.transfermarkt_url ?? "",
   })
+
+// If first/last are empty but full_name exists, split it once on mount
+useEffect(() => {
+  if (player?.full_name && (!form.first_name || !form.last_name)) {
+    const parts = String(player.full_name).trim().split(/\s+/)
+    if (!form.first_name && parts[0]) {
+      setForm(p => ({ ...p, first_name: parts[0] }))
+    }
+    if (!form.last_name && parts.length > 1) {
+      setForm(p => ({ ...p, last_name: parts.slice(1).join(" ") }))
+    }
+  }
+  // run once on mount
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+}, [])
+
+// Live display name (prefers current edits, then DB full_name, then placeholder)
+const displayName = useMemo(() => {
+  const fn = (form.first_name || "").trim()
+  const ln = (form.last_name || "").trim()
+  const fromForm = [fn, ln].filter(Boolean).join(" ")
+  return fromForm || (player.full_name || "").trim() || "Unnamed player"
+}, [form.first_name, form.last_name, player.full_name])
+
+
   function set<K extends keyof typeof form>(k: K, v: any) {
     setForm(p => ({ ...p, [k]: v }))
   }
@@ -172,15 +200,16 @@ export default function Client({
     })
   }
 
-  /* ---------------- Notes (horizontal, 1–6) ---------------- */
+  /* ---------------- Notes (horizontal, star rating 1–6) ---------------- */
   type CatState = { id?: string; rating: number; comment: string; saving?: boolean; savedAt?: number }
   const initialNotesState: Record<string, CatState> = useMemo(() => {
     const state: Record<string, CatState> = {}
     CATEGORIES.forEach(c => {
       const n = notes.find(nn => nn.category === c.key)
+      const clamped = n?.rating ? Math.max(1, Math.min(6, n.rating)) : null
       state[c.key] = {
         id: n?.id,
-        rating: (n?.rating && NOTE_SCALE.includes(Math.max(1, Math.min(6, n.rating)) as any)) ? (n?.rating as number) : 0,
+        rating: clamped && NOTE_SCALE.includes(clamped as any) ? (clamped as number) : 0,
         comment: n?.comment ?? "",
       }
     })
@@ -355,32 +384,43 @@ ${[comms, physical, exposure].filter(Boolean).join("\n")}`.trim()
   return (
     <div className="w-full space-y-6">
       {/* Header */}
-      <div className="flex items-center gap-4 px-4 md:px-0">
-        {player.image_url
-          ? <img src={player.image_url} alt={player.full_name} className="h-20 w-20 rounded-xl object-cover border" />
-          : <div className="grid h-20 w-20 place-items-center rounded-xl bg-muted text-xs text-muted-foreground">No photo</div>
-        }
-        <div className="min-w-0">
-          <h1 className="truncate text-2xl font-semibold">{player.full_name}</h1>
-          <div className="text-sm text-muted-foreground">
-            {player.main_position ? `Pos: ${player.main_position}` : "—"}
-            {player.current_club_name ? ` · ${player.current_club_name}` : "" }
-            {player.current_club_country ? ` (${player.current_club_country})` : "" }
-          </div>
+<div className="flex items-center gap-4 px-4 md:px-0">
+  {player.image_url ? (
+    <img
+      src={player.image_url}
+      alt={displayName}
+      className="h-20 w-20 rounded-xl object-cover border"
+    />
+  ) : (
+    <div className="grid h-20 w-20 place-items-center rounded-xl bg-muted text-xs text-muted-foreground">
+      No photo
+    </div>
+  )}
 
-          {/* notes summary chips */}
-          <div className="mt-2 flex flex-wrap gap-2">
-            <Badge variant="secondary" className="gap-1" title="How many categories have a rating or comment">
-              <FileText className="h-3.5 w-3.5" />
-              Notes {notesCoverage.filled}/{notesCoverage.total}
-            </Badge>
-            <Badge variant="outline" className="gap-1" title="Average of non-zero category ratings (1–6)">
-              <Star className="h-3.5 w-3.5" />
-              Avg {notesAverage ?? "—"}/6
-            </Badge>
-          </div>
-        </div>
-      </div>
+  <div className="min-w-0">
+    <h1 className="truncate text-2xl font-semibold" title={displayName}>
+      {displayName}
+    </h1>
+    <div className="text-sm text-muted-foreground">
+      {player.main_position ? `Pos: ${player.main_position}` : "—"}
+      {player.current_club_name ? ` · ${player.current_club_name}` : ""}
+      {player.current_club_country ? ` (${player.current_club_country})` : ""}
+    </div>
+
+    {/* notes summary chips */}
+    <div className="mt-2 flex flex-wrap gap-2">
+      <Badge variant="secondary" className="gap-1" title="How many categories have a rating or comment">
+        <FileText className="h-3.5 w-3.5" />
+        Notes {notesCoverage.filled}/{notesCoverage.total}
+      </Badge>
+      <Badge variant="outline" className="gap-1" title="Average of non-zero category ratings (1–6)">
+        <Star className="h-3.5 w-3.5" />
+        Avg {notesAverage ?? "—"}/6
+      </Badge>
+    </div>
+  </div>
+</div>
+
 
       {/* Progress */}
       <Card className="mx-0 rounded-2xl p-4 md:p-6">
@@ -541,86 +581,133 @@ ${[comms, physical, exposure].filter(Boolean).join("\n")}`.trim()
           </Card>
 
           {/* Horizontal categories + per-category panel */}
-          <Tabs value={activeCat} onValueChange={setActiveCat} className="space-y-3">
-            {/* Scrollable category bar */}
-            <div className="overflow-x-auto [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
-              <TabsList className="min-w-max gap-1 whitespace-nowrap rounded-xl">
-                {CATEGORIES.map((c) => (
-                  <TabsTrigger
-                    key={c.key}
-                    value={c.key}
-                    className="rounded-lg px-3 py-2 text-xs"
-                  >
-                    {c.label}
-                  </TabsTrigger>
-                ))}
-              </TabsList>
-            </div>
+{/* Horizontal categories + per-category panel → now VERTICAL */}
+<Tabs
+  value={activeCat}
+  onValueChange={setActiveCat}
+  orientation="vertical"
+  className="grid gap-3 md:grid-cols-[260px_1fr]"
+>
+  {/* Vertical tab list (mobile: stacked above content; desktop: left column) */}
+  <TabsList
+    role="tablist"
+    aria-orientation="vertical"
+    data-slot="tabs-list"
+    className="bg-muted text-muted-foreground flex h-auto w-full flex-col items-stretch justify-start gap-1 rounded-xl p-2"
+    tabIndex={0}
+    style={{ outline: "none" }}
+  >
+    {CATEGORIES.map((c) => {
+      const s = catNotes[c.key]
+      const hasNote = !!((s?.comment ?? "").trim() || (s?.rating ?? 0) > 0)
+      const current = s?.rating ?? 0
 
-            {CATEGORIES.map((cat) => {
-              const s = catNotes[cat.key]
-              const isFinal = cat.key === "final_comment"
-              return (
-                <TabsContent key={cat.key} value={cat.key}>
-                  <div className="rounded-xl border bg-card/50 p-3">
-                    <div className="flex flex-wrap items-center justify-between gap-2">
-                      <div className="text-sm font-medium">{cat.label}</div>
-                      <div className="flex items-center gap-2">
-                        {!isFinal && (
-                          <div className="inline-flex items-center gap-1 rounded-md border bg-background p-1">
-                            {NOTE_SCALE.map((n) => (
-                              <button
-                                key={n}
-                                type="button"
-                                onClick={() => setCat(cat.key, { rating: n })}
-                                className={
-                                  `h-8 min-w-[36px] rounded-md px-2 text-xs
-                                   ${s?.rating === n
-                                      ? "bg-primary text-primary-foreground"
-                                      : "bg-white hover:bg-muted border"}`
-                                }
-                                aria-label={`${n} out of 6`}
-                                aria-pressed={s?.rating === n}
-                              >
-                                {n}
-                              </button>
-                            ))}
-                          </div>
-                        )}
-                        <Button
-                          size="icon"
-                          variant="ghost"
-                          title="Delete note"
-                          onClick={() => deleteNote(cat.key)}
-                        >
-                          <Trash2 className="h-4 w-4" />
-                        </Button>
-                      </div>
-                    </div>
+      return (
+      <TabsTrigger
+  key={c.key}
+  value={c.key}
+  className={cn(
+    // --- your original utility set (kept) ---
+    "dark:data-[state=active]:text-foreground focus-visible:border-ring dark:data-[state=active]:border-input dark:data-[state=active]:bg-input/30 text-foreground dark:text-muted-foreground h-[calc(100%-1px)] flex-1 border border-transparent whitespace-nowrap data-[state=active]:shadow-sm [&_svg]:pointer-events-none [&_svg]:shrink-0 [&_svg:not([class*='size-'])]:size-4",
+    // --- updated layout & active colors ---
+    "group flex w-full items-center justify-start gap-2 rounded-lg px-3 py-2 text-xs font-medium transition",
+    "data-[state=active]:bg-black data-[state=active]:text-white",
+    "focus-visible:outline-1 focus-visible:outline-ring focus-visible:ring-[3px] focus-visible:ring-ring/50",
+    "disabled:pointer-events-none disabled:opacity-50"
+  )}
+  title={c.label}
+>
+  {/* label (truncated) */}
+  <span className="truncate">{c.label}</span>
 
-                    {!isFinal && (
-                      <p className="mt-2 text-[11px] text-muted-foreground">
-                        1 = poor · 3–4 = solid · 6 = elite
-                      </p>
-                    )}
+  {/* ocena badge — active -> black bg + white star/number */}
+  <span
+    className={cn(
+      "inline-flex items-center gap-1 text-[11px] rounded-md px-1.5 py-0.5 ml-auto",
+      current > 0 ? "bg-black text-white" : "bg-transparent"
+    )}
+  >
+    <Star
+      className="h-3.5 w-3.5"
+      fill={current > 0 ? "currentColor" : "none"}
+    />
+    <span>{current > 0 ? current : "—"}</span>
+  </span>
 
-                    <Textarea
-                      className="mt-3 h-28 resize-none"
-                      placeholder={isFinal ? "Final comment, summary, projection…" : "Short comment…"}
-                      value={s?.comment ?? ""}
-                      onChange={(e) => setCat(cat.key, { comment: e.target.value })}
-                    />
+  {/* has-note dot */}
+  {hasNote && (
+    <span
+      className="ml-0.5 inline-block h-1.5 w-1.5 rounded-full bg-emerald-500"
+      aria-label="Has note"
+      title="Has note"
+    />
+  )}
+</TabsTrigger>
+      )
+    })}
+  </TabsList>
 
-                    <div className="mt-2 text-[11px] text-muted-foreground">
-                      {s?.saving
-                        ? (<span className="inline-flex items-center gap-1"><Loader2 className="h-3 w-3 animate-spin" /> saving…</span>)
-                        : s?.savedAt ? "saved" : "—"}
-                    </div>
-                  </div>
-                </TabsContent>
-              )
-            })}
-          </Tabs>
+  {/* CONTENT (right on desktop, below on mobile) */}
+  {CATEGORIES.map((cat) => {
+    const s = catNotes[cat.key]
+    const isFinal = cat.key === "final_comment"
+    const rating = s?.rating ?? 0
+
+    return (
+      <TabsContent key={cat.key} value={cat.key} className="md:col-start-2">
+        <div className="rounded-xl border bg-card/50 p-3">
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <div className="text-sm font-medium">{cat.label}</div>
+
+            {/* Star rating control (1–6) */}
+            {!isFinal && (
+              <StarRating
+                max={6}
+                value={rating}
+                onChange={(n) => setCat(cat.key, { rating: n })}
+              />
+            )}
+
+            <Button
+              size="icon"
+              variant="ghost"
+              title="Delete note"
+              onClick={() => deleteNote(cat.key)}
+            >
+              <Trash2 className="h-4 w-4" />
+            </Button>
+          </div>
+
+          {!isFinal && (
+            <p className="mt-2 text-[11px] text-muted-foreground">
+              1 = poor · 3–4 = solid · 6 = elite
+            </p>
+          )}
+
+          <Textarea
+            className="mt-3 h-28 resize-none"
+            placeholder={isFinal ? "Final comment, summary, projection…" : "Short comment…"}
+            value={s?.comment ?? ""}
+            onChange={(e) => setCat(cat.key, { comment: e.target.value })}
+          />
+
+          <div className="mt-2 text-[11px] text-muted-foreground">
+            {s?.saving ? (
+              <span className="inline-flex items-center gap-1">
+                <Loader2 className="h-3 w-3 animate-spin" /> saving…
+              </span>
+            ) : s?.savedAt ? (
+              "saved"
+            ) : (
+              "—"
+            )}
+          </div>
+        </div>
+      </TabsContent>
+    )
+  })}
+</Tabs>
+
         </Card>
 
         {/* RIGHT: Observations */}
@@ -893,7 +980,6 @@ function ObservationsPanel({
             </DialogContent>
           </Dialog>
 
-
           <Select value={chosenSession} onValueChange={setChosenSession} disabled={adding}>
             <SelectTrigger className="h-9 w-[260px]">
               <SelectValue placeholder="Choose observation session…" />
@@ -977,6 +1063,59 @@ function ToggleField({ label, checked, onChange }: { label: string; checked: boo
     <div className="flex items-center justify-between rounded-lg border p-3">
       <div><Label>{label}</Label></div>
       <Switch checked={checked} onCheckedChange={onChange} />
+    </div>
+  )
+}
+
+/* ---------- Star rating (1–6) ---------- */
+function StarRating({
+  value,
+  onChange,
+  max = 6,
+}: {
+  value: number
+  onChange: (n: number) => void
+  max?: number
+}) {
+  const [hover, setHover] = useState<number | null>(null)
+
+  return (
+    <div className="inline-flex items-center gap-1 rounded-md border bg-background p-1">
+      {Array.from({ length: max }, (_, i) => i + 1).map((n) => {
+        const active = (hover ?? value) >= n
+        return (
+          <button
+            key={n}
+            type="button"
+            onMouseEnter={() => setHover(n)}
+            onMouseLeave={() => setHover(null)}
+            onFocus={() => setHover(n)}
+            onBlur={() => setHover(null)}
+            onClick={() => onChange(n)}
+            className={cn(
+              "grid h-5 w-5 place-items-center rounded border transition",
+              active
+                ? "bg-black text-white border-black"
+                : "text-muted-foreground hover:bg-muted border-transparent"
+            )}
+            aria-label={`${n} out of ${max}`}
+            aria-pressed={value === n}
+          >
+            <Star className="h-4 w-4" fill={active ? "currentColor" : "none"} />
+          </button>
+        )
+      })}
+      {value > 0 && (
+        <button
+          type="button"
+          onClick={() => onChange(0)}
+          className="ml-1 h-8 rounded px-2 text-xs text-muted-foreground hover:bg-muted"
+          aria-label="Clear rating"
+          title="Clear rating"
+        >
+          Reset
+        </button>
+      )}
     </div>
   )
 }

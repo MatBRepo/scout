@@ -88,13 +88,12 @@ function NavItem({
   const pathname = usePathname()
   const locale = useLocale() as 'en' | 'pl'
 
-  // Normalize current path by removing a leading /en or /pl to compare against unprefixed hrefs
   const normalized = (pathname || '/').replace(/^\/(en|pl)(?=\/|$)/, '') || '/'
   const active = normalized === href || normalized.startsWith(href + '/')
 
   return (
     <Link
-      href={href} // our Link wrapper will prefix the locale automatically
+      href={href}
       onClick={onClick}
       className={cn(
         'group flex items-center gap-2 rounded-xl px-3 py-2 text-sm transition',
@@ -394,6 +393,15 @@ export function AppSidebar() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
+  // Lock background scroll when mobile drawer is open
+  useEffect(() => {
+    if (mobileOpen) {
+      const original = document.body.style.overflow
+      document.body.style.overflow = 'hidden'
+      return () => { document.body.style.overflow = original }
+    }
+  }, [mobileOpen])
+
   const closeMobile = () => setMobileOpen(false)
   const canDiscover = role === 'scout_agent' || role === 'admin'
 
@@ -493,7 +501,6 @@ export function AppSidebar() {
                 <p className="text-xs text-muted-foreground">{t('brand.subtitle')}</p>
               </div>
             )}
-            {/* removed top LanguageToggle & ThemeToggle */}
           </div>
 
           {ScoutBlock}
@@ -506,29 +513,36 @@ export function AppSidebar() {
       {/* Mobile drawer */}
       {mobileOpen && (
         <div className="fixed inset-0 z-50 md:hidden">
+          {/* Backdrop */}
           <div className="absolute inset-0 bg-black/50" onClick={closeMobile} />
-          <div className="absolute inset-y-0 left-0 w-80 max-w-[85%] bg-background border-r shadow-xl flex h-full flex-col">
-            <div className="p-4">
-              <div className="flex items-center justify-between">
-                <div>
-                  <Link href="/" onClick={closeMobile} className="font-bold text-lg">{t('brand.title')}</Link>
-                  <p className="text-xs text-muted-foreground">{t('brand.subtitle')}</p>
+
+          {/* Drawer */}
+          <div className="absolute inset-y-0 left-0 w-80 max-w-[90%] bg-background border-r shadow-xl flex h-[100dvh] flex-col overscroll-contain">
+            {/* Scrollable content (header + nav) */}
+            <div className="flex-1 min-h-0 overflow-y-auto">
+              <div className="p-4 pt-[calc(env(safe-area-inset-top)+1rem)]">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <Link href="/" onClick={closeMobile} className="font-bold text-lg">{t('brand.title')}</Link>
+                    <p className="text-xs text-muted-foreground">{t('brand.subtitle')}</p>
+                  </div>
+                  <button
+                    className="inline-flex items-center justify-center rounded-md border p-2 hover:bg-muted"
+                    onClick={closeMobile}
+                    aria-label={t('ui.close')}
+                  >
+                    <X className="h-5 w-5" />
+                  </button>
                 </div>
-                <button
-                  className="inline-flex items-center justify-center rounded-md border p-2 hover:bg-muted"
-                  onClick={closeMobile}
-                  aria-label={t('ui.close')}
-                >
-                  <X className="h-5 w-5" />
-                </button>
+
+                <Divider />
+                {ScoutBlock}
+                {AdminBlock}
               </div>
-              {/* removed top toggles from mobile header */}
-              <Divider />
-              {ScoutBlock}
-              {AdminBlock}
             </div>
 
-            <div className="mt-auto">
+            {/* Sticky bottom (account + toggles) with safe-area */}
+            <div className="sticky bottom-0 bg-background pb-[env(safe-area-inset-bottom)]">
               {BottomBlock}
             </div>
           </div>
