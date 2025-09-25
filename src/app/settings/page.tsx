@@ -17,7 +17,7 @@ export default async function SettingsPage() {
     .maybeSingle()
 
   return (
-    <main className="mx-auto max-w-3xl px-4 sm:px-6 py-8 bg-gradient-to-br from-primary/10 via-muted to-background">
+    <main className="mx-auto max-w-3xl px-4 sm:px-6 py-8 bg-gradient-to-br from-primary/5 via-muted to-background">
       <h1 className="text-2xl font-semibold mb-2">Settings</h1>
       <p className="text-sm text-muted-foreground mb-6">
         Manage your profile and preferences.

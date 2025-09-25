@@ -26,10 +26,10 @@ export default async function Home() {
   }
 
   return (
-    <main className="relative min-h-dvh bg-gradient-to-br from-primary/10 via-muted to-background">
+    <main className="relative min-h-dvh bg-gradient-to-br from-primary/5 via-muted to-background">
       {/* Soft background flourishes (dimmed on mobile) */}
       <div className="pointer-events-none absolute inset-0 -z-10">
-        <div className="absolute inset-0 bg-gradient-to-b from-primary/10 via-background to-background" />
+        <div className="absolute inset-0 bg-gradient-to-b from-primary/5 via-background to-background" />
         <div className="absolute -top-24 -left-24 h-64 w-64 rounded-full bg-primary/20 blur-3xl opacity-20 sm:h-72 sm:w-72 sm:opacity-30" />
         <div className="absolute -bottom-24 -right-24 h-64 w-64 rounded-full bg-emerald-400/20 blur-3xl opacity-20 sm:h-72 sm:w-72 sm:opacity-30" />
       </div>

@@ -8,7 +8,7 @@ export const metadata: Metadata = {
 
 export default function AuthLayout({ children }: { children: React.ReactNode }) {
   return (
-    <main className="min-h-dvh grid place-items-center bg-gradient-to-br from-primary/10 via-muted to-background">
+    <main className="min-h-dvh grid place-items-center bg-gradient-to-br from-primary/5 via-muted to-background">
       {children}
     </main>
   );

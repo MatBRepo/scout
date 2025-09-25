@@ -14,7 +14,7 @@ export default async function ScoutLayout({children}: {children: ReactNode}) {
 
       <div className="flex-1 flex flex-col">
         <Topbar />
-        <main className="p-4 md:p-8 bg-gradient-to-br from-primary/10 via-muted to-background">{children}</main>
+        <main className="p-4 md:p-8 bg-gradient-to-br from-primary/5 via-muted to-background">{children}</main>
       </div>
     </div>
   )
