@@ -6,17 +6,14 @@ import { createClient } from "@/lib/supabase/browser"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Textarea } from "@/components/ui/textarea"
-import { Badge } from "@/components/ui/badge"
 import { Switch } from "@/components/ui/switch"
 import { Separator } from "@/components/ui/separator"
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog"
 import { toast } from "sonner"
-import { Minus } from "lucide-react"
-
 
 import {
   Plus, Save, Trash2, CalendarDays, Users, Search, Loader2,
-  ExternalLink, Mic, Square, FileText, Star, Tv, Binoculars
+  ExternalLink, Mic, Square, FileText, Star, Tv, Binoculars, Minus
 } from "lucide-react"
 import VoiceNotesPanel from "../_components/VoiceNotesPanel.client"
 
@@ -37,11 +34,12 @@ type Row = {
   player_id: string | null
   player_entry_id: string | null
   minutes_watched: number | null
-  rating: number | null // 1–5
+  rating: number | null // 1–5 UI (DB allows 1–10)
   offense_rating?: number | null
   defense_rating?: number | null
   technique_rating?: number | null
   motor_rating?: number | null
+  played_position?: string | null        // <-- NEW
   notes: string | null
   players?: { id: string; full_name: string; image_url: string | null; transfermarkt_url: string | null } | null
   scout_player_entries?: { id: string; full_name: string; image_url: string | null; transfermarkt_url: string | null } | null
@@ -165,12 +163,43 @@ export default function ObservationEditor({ session: initial, rows: initialRows 
     }
   }
 
-  /** ---------------- Player rows (minimal styling) ---------------- */
+  /** ---------------- Player rows ---------------- */
   const [rows, setRows] = useState<Row[]>(initialRows)
+
+  // On open, refresh latest values (ratings, notes, played_position) from DB
+  useEffect(() => {
+    ;(async () => {
+      try {
+        const { data, error } = await supabase
+          .from("observation_players")
+          .select(`
+            id, observation_id, player_id, player_entry_id,
+            minutes_watched, rating, offense_rating, defense_rating, technique_rating, motor_rating,
+            notes, played_position,
+            players ( id, full_name, image_url, transfermarkt_url ),
+            scout_player_entries ( id, full_name, image_url, transfermarkt_url )
+          `)
+          .eq("observation_id", initial.id)
+          .order("created_at", { ascending: false })
+        if (error) throw error
+        if (data) setRows(data as unknown as Row[])
+      } catch (e: any) {
+        console.warn("Refresh rows failed:", e?.message)
+      }
+    })()
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [initial.id])
 
   type Draft = Pick<
     Row,
-    "minutes_watched" | "rating" | "notes" | "offense_rating" | "defense_rating" | "technique_rating" | "motor_rating"
+    | "minutes_watched"
+    | "rating"
+    | "notes"
+    | "offense_rating"
+    | "defense_rating"
+    | "technique_rating"
+    | "motor_rating"
+    | "played_position"    // <-- NEW
   >
   const [dirty, setDirty] = useState<Record<string, Draft>>({})
   const [savingRow, setSavingRow] = useState<Record<string, boolean>>({})
@@ -186,11 +215,21 @@ export default function ObservationEditor({ session: initial, rows: initialRows 
     setSavingRow((s) => ({ ...s, [id]: true }))
     try {
       const body: Record<string, any> = {}
-      ;(["minutes_watched", "rating", "notes", "offense_rating", "defense_rating", "technique_rating", "motor_rating"] as const)
-        .forEach((k) => {
-          const next = (patch as any)[k]
-          if (next !== undefined) body[k] = next
-        })
+      ;(
+        [
+          "minutes_watched",
+          "rating",
+          "notes",
+          "offense_rating",
+          "defense_rating",
+          "technique_rating",
+          "motor_rating",
+          "played_position", // <-- NEW
+        ] as const
+      ).forEach((k) => {
+        const next = (patch as any)[k]
+        if (next !== undefined) body[k] = next
+      })
 
       const r = await fetch(`/scout/observations/players/${id}`, {
         method: "PATCH",
@@ -200,7 +239,7 @@ export default function ObservationEditor({ session: initial, rows: initialRows 
       const j = await r.json().catch(() => ({}))
       if (!r.ok) throw new Error(j.error || "Save failed")
 
-      setRows((prev) => prev.map((row) => (row.id === id ? { ...row, ...body } : row)))
+      setRows((prev) => prev.map((row) => (row.id === id ? { ...row, ...body } as Row : row)))
       setDirty((d) => {
         const { [id]: _, ...rest } = d
         return rest
@@ -339,6 +378,11 @@ export default function ObservationEditor({ session: initial, rows: initialRows 
           player_entry_id: payload.player_entry_id ?? null,
           minutes_watched: 0,
           rating: null,
+          offense_rating: null,
+          defense_rating: null,
+          technique_rating: null,
+          motor_rating: null,
+          played_position: null, // <-- default
           notes: "",
           players: undefined,
           scout_player_entries: undefined,
@@ -420,7 +464,7 @@ export default function ObservationEditor({ session: initial, rows: initialRows 
     }
     const map: Record<string, number> = {}
     let obsLevel = 0
-    for (const v of data || []) {
+    for (const v of (data as any[]) || []) {
       if (v.observation_player_id) {
         map[v.observation_player_id] = (map[v.observation_player_id] || 0) + 1
       } else {
@@ -655,10 +699,6 @@ export default function ObservationEditor({ session: initial, rows: initialRows 
       ? `${session.competition} • vs ${session.opponent}`
       : "Session title (optional)"
   const formatDate = (d?: string | null) => d || ""
-  const rowHasTextNote = (row: Row) => {
-    const v = (dirty[row.id]?.notes !== undefined ? dirty[row.id]?.notes : row.notes) || ""
-    return Boolean(String(v).trim())
-  }
 
   /* ================================ RENDER ================================ */
 
@@ -857,212 +897,224 @@ export default function ObservationEditor({ session: initial, rows: initialRows 
 
       <Separator />
 
-{/* Players – new card UX */}
-<section className="space-y-3 pt-3">
-  <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-3">
-    {rows.map((row) => {
-      const p = row.players ?? row.scout_player_entries
-      const isSaving = !!savingRow[row.id]
-      const isNotesOpen = !!openNotesByRow[row.id]
-      const isDirty = !!dirty[row.id]
+      {/* Players – new card UX */}
+      <section className="space-y-3 pt-3">
+        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-3">
+          {rows.map((row) => {
+            const p = row.players ?? row.scout_player_entries
+            const isSaving = !!savingRow[row.id]
+            const isNotesOpen = !!openNotesByRow[row.id]
+            const isDirty = !!dirty[row.id]
 
-      const voiceCountForRow = voiceCountsByRow[row.id] || 0
-      const textNoteForRow = ((dirty[row.id]?.notes ?? row.notes) || "").trim() ? 1 : 0
+            const voiceCountForRow = voiceCountsByRow[row.id] || 0
+            const textNoteForRow = ((dirty[row.id]?.notes ?? row.notes) || "").trim() ? 1 : 0
 
-      const currentOverall = (dirty[row.id]?.rating ?? row.rating) ?? 0
-      const curOff = (dirty[row.id]?.offense_rating ?? row.offense_rating) ?? 0
-      const curDef = (dirty[row.id]?.defense_rating ?? row.defense_rating) ?? 0
-      const curTec = (dirty[row.id]?.technique_rating ?? row.technique_rating) ?? 0
-      const curMot = (dirty[row.id]?.motor_rating ?? row.motor_rating) ?? 0
+            const currentOverall = (dirty[row.id]?.rating ?? row.rating) ?? 0
+            const curOff = (dirty[row.id]?.offense_rating ?? row.offense_rating) ?? 0
+            const curDef = (dirty[row.id]?.defense_rating ?? row.defense_rating) ?? 0
+            const curTec = (dirty[row.id]?.technique_rating ?? row.technique_rating) ?? 0
+            const curMot = (dirty[row.id]?.motor_rating ?? row.motor_rating) ?? 0
+            const playedPos = (dirty[row.id]?.played_position ?? row.played_position) ?? ""
 
-      const minutes = (dirty[row.id]?.minutes_watched ?? row.minutes_watched) ?? 0
-      const step = (n: number) => {
-        const next = Math.max(0, minutes + n)
-        setRowDraft(row.id, { minutes_watched: next })
-      }
+            const minutes = (dirty[row.id]?.minutes_watched ?? row.minutes_watched) ?? 0
+            const step = (n: number) => {
+              const next = Math.max(0, minutes + n)
+              setRowDraft(row.id, { minutes_watched: next })
+            }
 
-      return (
-        <article
-          key={row.id}
-          className={`rounded-xl border bg-card p-3 sm:p-4 shadow-sm transition-all hover:shadow-md ${isDirty ? "ring-1 ring-amber-400/40" : ""}`}
-        >
-          {/* Header */}
-          <div className="flex items-start gap-3">
-            {/* eslint-disable-next-line @next/next/no-img-element */}
-            <img
-              src={p?.image_url || FALLBACK_SVG}
-              alt={p?.full_name || "Player"}
-              className="h-14 w-14 rounded-lg object-cover"
-            />
-            <div className="min-w-0 flex-1">
-              <div className="flex items-center gap-2">
-                <h3 className="truncate text-sm font-semibold">{p?.full_name ?? "(unknown)"}</h3>
-                {isDirty && <span className="h-2 w-2 rounded-full bg-amber-500" title="Unsaved changes" />}
-              </div>
+            return (
+              <article
+                key={row.id}
+                className={`rounded-xl border bg-card p-3 sm:p-4 shadow-sm transition-all hover:shadow-md ${isDirty ? "ring-1 ring-amber-400/40" : ""}`}
+              >
+                {/* Header */}
+                <div className="flex items-start gap-3">
+                  {/* eslint-disable-next-line @next/next/no-img-element */}
+                  <img
+                    src={p?.image_url || FALLBACK_SVG}
+                    alt={p?.full_name || "Player"}
+                    className="h-14 w-14 rounded-lg object-cover"
+                  />
+                  <div className="min-w-0 flex-1">
+                    <div className="flex items-center gap-2">
+                      <h3 className="truncate text-sm font-semibold">{p?.full_name ?? "(unknown)"}</h3>
+                      {isDirty && <span className="h-2 w-2 rounded-full bg-amber-500" title="Unsaved changes" />}
+                    </div>
 
-              <div className="mt-1 flex flex-wrap items-center gap-2 text-[11px] text-muted-foreground">
-                {row.player_id && <span className="rounded bg-muted/60 px-1.5 py-0.5">Players</span>}
-                {row.player_entry_id && <span className="rounded bg-muted/60 px-1.5 py-0.5">Entry</span>}
-                {p?.transfermarkt_url && (
-                  <a
-                    href={p.transfermarkt_url}
-                    target="_blank"
-                    rel="noreferrer"
-                    className="inline-flex items-center gap-0 underline hover:text-foreground"
-                  >
-                    TM <ExternalLink className="h-3.5 w-3.5" />
-                  </a>
+                    <div className="mt-1 flex flex-wrap items-center gap-2 text-[11px] text-muted-foreground">
+                      {row.player_id && <span className="rounded bg-muted/60 px-1.5 py-0.5">Players</span>}
+                      {row.player_entry_id && <span className="rounded bg-muted/60 px-1.5 py-0.5">Entry</span>}
+                      {p?.transfermarkt_url && (
+                        <a
+                          href={p.transfermarkt_url}
+                          target="_blank"
+                          rel="noreferrer"
+                          className="inline-flex items-center gap-0 underline hover:text-foreground"
+                        >
+                          TM <ExternalLink className="h-3.5 w-3.5" />
+                        </a>
+                      )}
+                      <span className="ml-auto inline-flex items-center gap-2">
+                        <span className="inline-flex items-center gap-0" title="Tekst">
+                          <FileText className="h-3.5 w-3.5" /> {textNoteForRow}
+                        </span>
+                        <span className="inline-flex items-center gap-0" title="Głos">
+                          <Mic className="h-3.5 w-3.5" /> {voiceCountForRow}
+                        </span>
+                      </span>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Primary controls */}
+                <div className="mt-3 grid grid-cols-1 gap-3">
+                  {/* Minutes stepper */}
+                  <div className="flex items-center justify-between rounded-lg bg-muted/40 px-2 py-1.5">
+                    <span className="text-xs text-muted-foreground">Minuty</span>
+                    <div className="flex items-center gap-1">
+                      <Button size="icon" variant="ghost" className="h-8 w-8" onClick={() => step(-5)} aria-label="-5">
+                        <Minus className="h-4 w-4" />
+                      </Button>
+                      <Input
+                        inputMode="numeric"
+                        type="number"
+                        min={0}
+                        className="h-8 w-[86px] text-center"
+                        value={minutes}
+                        onChange={(e) => setRowDraft(row.id, { minutes_watched: Number(e.target.value || 0) })}
+                        aria-label="Minutes watched"
+                      />
+                      <Button size="icon" variant="ghost" className="h-8 w-8" onClick={() => step(+5)} aria-label="+5">
+                        <Plus className="h-4 w-4" />
+                      </Button>
+                    </div>
+                  </div>
+
+                  {/* Position (played) */}
+                  <div className="flex items-center justify-between rounded-lg bg-muted/40 px-2 py-1.5">
+                    <span className="text-xs text-muted-foreground">Pozycja (zagrał)</span>
+                    <Input
+                      value={playedPos}
+                      onChange={(e) => setRowDraft(row.id, { played_position: e.target.value })}
+                      placeholder="np. RW / CM"
+                      aria-label="Position played"
+                      className="h-8 w-[120px] sm:w-[160px] text-center"
+                    />
+                  </div>
+
+                  {/* Overall rating + voice */}
+                  <div className="flex flex-wrap items-center justify-between gap-2 rounded-lg bg-muted/40 px-2 py-2">
+                    <div className="flex items-center gap-2">
+                      <span className="text-xs text-muted-foreground">Ocena ogólna</span>
+                      <Rate5 value={currentOverall} onChange={(n) => setRowDraft(row.id, { rating: n })} ariaLabel="Overall rating" />
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <InlineRecorder
+                        observationId={session.id}
+                        playerId={row.player_id ?? undefined}
+                        observationPlayerId={row.id}
+                        onSaved={() => {
+                          toggleRowNotes(row.id, true)
+                          setRowNotesKey((m) => ({ ...m, [row.id]: (m[row.id] || 0) + 1 }))
+                        }}
+                      />
+                      <Button
+                        size="sm"
+                        variant={isNotesOpen ? "secondary" : "outline"}
+                        className="gap-2"
+                        onClick={() => toggleRowNotes(row.id)}
+                        aria-expanded={isNotesOpen}
+                        aria-controls={`voice-${row.id}`}
+                      >
+                        <Mic className="h-4 w-4" />
+                        <span>Voice ({voiceCountForRow})</span>
+                      </Button>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Sub-ratings */}
+                <div className="mt-3 grid grid-cols-2 gap-x-4 gap-y-3 sm:grid-cols-2">
+                  <div className="grid gap-1">
+                    <span className="text-[11px] text-muted-foreground">Ofensywa</span>
+                    <Rate5 value={curOff} onChange={(n) => setRowDraft(row.id, { offense_rating: n })} ariaLabel="Ofensywa" />
+                  </div>
+                  <div className="grid gap-1">
+                    <span className="text-[11px] text-muted-foreground">Defensywa</span>
+                    <Rate5 value={curDef} onChange={(n) => setRowDraft(row.id, { defense_rating: n })} ariaLabel="Defensywa" />
+                  </div>
+                  <div className="grid gap-1">
+                    <span className="text-[11px] text-muted-foreground">Technika</span>
+                    <Rate5 value={curTec} onChange={(n) => setRowDraft(row.id, { technique_rating: n })} ariaLabel="Technika" />
+                  </div>
+                  <div className="grid gap-1">
+                    <span className="text-[11px] text-muted-foreground">Motoryka</span>
+                    <Rate5 value={curMot} onChange={(n) => setRowDraft(row.id, { motor_rating: n })} ariaLabel="Motoryka" />
+                  </div>
+                </div>
+
+                {/* Text notes */}
+                <div className="mt-3">
+<Textarea
+  rows={2}
+  className="w-full resize-y"
+  value={(dirty[row.id]?.notes ?? row.notes) ?? ""}   // ← was defaultValue
+  onChange={(e) => setRowDraft(row.id, { notes: e.target.value })}
+  placeholder="Notatki do tego zawodnika…"
+  aria-label="Player notes"
+/>
+                </div>
+
+                {/* Voice notes panel */}
+                {isNotesOpen && (
+                  <div id={`voice-${row.id}`} className="mt-3 overflow-x-auto rounded-lg border">
+                    <VoiceNotesPanel
+                      key={rowNotesKey[row.id] || 0}
+                      observationId={session.id}
+                      playerId={row.player_id ?? undefined}
+                      observationPlayerId={row.id}
+                      title="Notatki głosowe (zawodnik)"
+                    />
+                  </div>
                 )}
-                <span className="ml-auto inline-flex items-center gap-2">
-                  <span className="inline-flex items-center gap-0" title="Tekst">
-                    <FileText className="h-3.5 w-3.5" /> {textNoteForRow}
-                  </span>
-                  <span className="inline-flex items-center gap-0" title="Głos">
-                    <Mic className="h-3.5 w-3.5" /> {voiceCountForRow}
-                  </span>
-                </span>
-              </div>
-            </div>
-          </div>
 
-          {/* Primary controls */}
-          <div className="mt-3 grid grid-cols-1 gap-3">
-            {/* Minutes stepper */}
-            <div className="flex items-center justify-between rounded-lg bg-muted/40 px-2 py-1.5">
-              <span className="text-xs text-muted-foreground">Minuty</span>
-              <div className="flex items-center gap-1">
-                <Button size="icon" variant="ghost" className="h-8 w-8" onClick={() => step(-5)} aria-label="-5">
-                  <Minus className="h-4 w-4" />
-                </Button>
-                <Input
-                  inputMode="numeric"
-                  type="number"
-                  min={0}
-                  className="h-8 w-[86px] text-center"
-                  value={minutes}
-                  onChange={(e) => setRowDraft(row.id, { minutes_watched: Number(e.target.value || 0) })}
-                  aria-label="Minutes watched"
-                />
-                <Button size="icon" variant="ghost" className="h-8 w-8" onClick={() => step(+5)} aria-label="+5">
-                  <Plus className="h-4 w-4" />
-                </Button>
-              </div>
-            </div>
+                {/* Actions toolbar */}
+                <div className="mt-3 flex flex-wrap items-center justify-end gap-1.5">
+                  {showRowSave(row.id) && (
+                    <Button
+                      size="sm"
+                      onClick={() => saveRow(row.id)}
+                      disabled={isSaving}
+                      className="gap-2"
+                      aria-label="Save row"
+                    >
+                      {isSaving ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}
+                      Zapisz
+                    </Button>
+                  )}
+                  <Button
+                    size="sm"
+                    variant="ghost"
+                    className="gap-2"
+                    onClick={() => deleteRow(row.id)}
+                    disabled={isSaving}
+                    aria-label="Remove row"
+                  >
+                    <Trash2 className="h-4 w-4" />
+                    Usuń
+                  </Button>
+                </div>
+              </article>
+            )
+          })}
 
-            {/* Overall rating + voice */}
-            <div className="flex flex-wrap items-center justify-between gap-2 rounded-lg bg-muted/40 px-2 py-2">
-              <div className="flex items-center gap-2">
-                <span className="text-xs text-muted-foreground">Ocena ogólna</span>
-                <Rate5 value={currentOverall} onChange={(n) => setRowDraft(row.id, { rating: n })} ariaLabel="Overall rating" />
-              </div>
-              <div className="flex items-center gap-2">
-                <InlineRecorder
-                  observationId={session.id}
-                  playerId={row.player_id ?? undefined}
-                  observationPlayerId={row.id}
-                  onSaved={() => {
-                    toggleRowNotes(row.id, true)
-                    setRowNotesKey((m) => ({ ...m, [row.id]: (m[row.id] || 0) + 1 }))
-                  }}
-                />
-                <Button
-                  size="sm"
-                  variant={isNotesOpen ? "secondary" : "outline"}
-                  className="gap-2"
-                  onClick={() => toggleRowNotes(row.id)}
-                  aria-expanded={isNotesOpen}
-                  aria-controls={`voice-${row.id}`}
-                >
-                  <Mic className="h-4 w-4" />
-                  <span>Voice ({voiceCountForRow})</span>
-                </Button>
-              </div>
-            </div>
-          </div>
-
-          {/* Sub-ratings */}
-          <div className="mt-3 grid grid-cols-2 gap-x-4 gap-y-3 sm:grid-cols-2">
-            <div className="grid gap-1">
-              <span className="text-[11px] text-muted-foreground">Ofensywa</span>
-              <Rate5 value={curOff} onChange={(n) => setRowDraft(row.id, { offense_rating: n })} ariaLabel="Ofensywa" />
-            </div>
-            <div className="grid gap-1">
-              <span className="text-[11px] text-muted-foreground">Defensywa</span>
-              <Rate5 value={curDef} onChange={(n) => setRowDraft(row.id, { defense_rating: n })} ariaLabel="Defensywa" />
-            </div>
-            <div className="grid gap-1">
-              <span className="text-[11px] text-muted-foreground">Technika</span>
-              <Rate5 value={curTec} onChange={(n) => setRowDraft(row.id, { technique_rating: n })} ariaLabel="Technika" />
-            </div>
-            <div className="grid gap-1">
-              <span className="text-[11px] text-muted-foreground">Motoryka</span>
-              <Rate5 value={curMot} onChange={(n) => setRowDraft(row.id, { motor_rating: n })} ariaLabel="Motoryka" />
-            </div>
-          </div>
-
-          {/* Text notes */}
-          <div className="mt-3">
-            <Textarea
-              rows={2}
-              className="w-full resize-y"
-              defaultValue={row.notes ?? ""}
-              onChange={(e) => setRowDraft(row.id, { notes: e.target.value })}
-              placeholder="Notatki do tego zawodnika…"
-              aria-label="Player notes"
-            />
-          </div>
-
-          {/* Voice notes panel */}
-          {isNotesOpen && (
-            <div id={`voice-${row.id}`} className="mt-3 overflow-x-auto rounded-lg border">
-              <VoiceNotesPanel
-                key={rowNotesKey[row.id] || 0}
-                observationId={session.id}
-                playerId={row.player_id ?? undefined}
-                observationPlayerId={row.id}
-                title="Notatki głosowe (zawodnik)"
-              />
+          {!rows.length && (
+            <div className="col-span-full rounded-md bg-muted/30 px-3 py-4 text-center text-xs text-muted-foreground">
+              Brak zawodników. Użyj wyszukiwarki lub Quick add.
             </div>
           )}
-
-          {/* Actions toolbar */}
-          <div className="mt-3 flex flex-wrap items-center justify-end gap-1.5">
-            {showRowSave(row.id) && (
-              <Button
-                size="sm"
-                onClick={() => saveRow(row.id)}
-                disabled={isSaving}
-                className="gap-2"
-                aria-label="Save row"
-              >
-                {isSaving ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}
-                Zapisz
-              </Button>
-            )}
-            <Button
-              size="sm"
-              variant="ghost"
-              className="gap-2"
-              onClick={() => deleteRow(row.id)}
-              disabled={isSaving}
-              aria-label="Remove row"
-            >
-              <Trash2 className="h-4 w-4" />
-              Usuń
-            </Button>
-          </div>
-        </article>
-      )
-    })}
-
-    {!rows.length && (
-      <div className="col-span-full rounded-md bg-muted/30 px-3 py-4 text-center text-xs text-muted-foreground">
-        Brak zawodników. Użyj wyszukiwarki lub Quick add.
-      </div>
-    )}
-  </div>
-</section>
-
+        </div>
+      </section>
 
       {/* ---------- Quick Add Player Dialog ---------- */}
       <Dialog open={quickOpen} onOpenChange={setQuickOpen}>

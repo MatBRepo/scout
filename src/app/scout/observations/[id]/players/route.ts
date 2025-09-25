@@ -1,8 +1,18 @@
-// src/app/scout/observations/[id]/players/route.ts
 import { NextResponse } from "next/server"
 import { createClient } from "@/lib/supabase/server"
 
 export const dynamic = "force-dynamic"
+
+// Reuse the same SELECT fragment everywhere so all fields stay in sync
+const OP_ROW_SELECT = `
+  id, observation_id, player_id, player_entry_id,
+  minutes_watched, rating,
+  offense_rating, defense_rating, technique_rating, motor_rating,
+  played_position,
+  notes, created_at,
+  players ( id, full_name, image_url, transfermarkt_url ),
+  scout_player_entries ( id, full_name, image_url, transfermarkt_url )
+`
 
 /** Add a player (canonical or entry) to an observation */
 export async function POST(
@@ -12,9 +22,7 @@ export async function POST(
   const { id: observationId } = await ctx.params
   const supabase = await createClient()
 
-  const {
-    data: { user },
-  } = await supabase.auth.getUser()
+  const { data: { user } } = await supabase.auth.getUser()
   if (!user) return NextResponse.json({ error: "Not authenticated" }, { status: 401 })
 
   // Ensure the observation belongs to the current user
@@ -60,20 +68,14 @@ export async function POST(
   const { data: row, error } = await supabase
     .from("observation_players")
     .insert(insert)
-    .select(
-      `
-      id, observation_id, player_id, player_entry_id, minutes_watched, rating, notes,
-      players ( id, full_name, image_url, transfermarkt_url ),
-      scout_player_entries ( id, full_name, image_url, transfermarkt_url )
-    `
-    )
+    .select(OP_ROW_SELECT)
     .maybeSingle()
 
   if (error) return NextResponse.json({ error: error.message }, { status: 400 })
   return NextResponse.json({ row })
 }
 
-/** Optional: list all players already attached to an observation */
+/** List all players already attached to an observation */
 export async function GET(
   _req: Request,
   ctx: { params: Promise<{ id: string }> }
@@ -81,9 +83,7 @@ export async function GET(
   const { id: observationId } = await ctx.params
   const supabase = await createClient()
 
-  const {
-    data: { user },
-  } = await supabase.auth.getUser()
+  const { data: { user } } = await supabase.auth.getUser()
   if (!user) return NextResponse.json({ error: "Not authenticated" }, { status: 401 })
 
   const { data: obs } = await supabase
@@ -97,13 +97,7 @@ export async function GET(
 
   const { data, error } = await supabase
     .from("observation_players")
-    .select(
-      `
-      id, observation_id, player_id, player_entry_id, minutes_watched, rating, notes, created_at,
-      players ( id, full_name, image_url, transfermarkt_url ),
-      scout_player_entries ( id, full_name, image_url, transfermarkt_url )
-    `
-    )
+    .select(OP_ROW_SELECT)
     .eq("observation_id", observationId)
     .order("created_at", { ascending: false })
 
