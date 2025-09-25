@@ -26,7 +26,7 @@ export default async function Home() {
   }
 
   return (
-    <main className="relative min-h-dvh">
+    <main className="relative min-h-dvh bg-gradient-to-br from-primary/10 via-muted to-background">
       {/* Soft background flourishes (dimmed on mobile) */}
       <div className="pointer-events-none absolute inset-0 -z-10">
         <div className="absolute inset-0 bg-gradient-to-b from-primary/10 via-background to-background" />

@@ -10,7 +10,7 @@ export default function AdminLayout({ children }: { children: ReactNode }) {
       <div className="flex-1 flex flex-col">
         {/* Topbar visible on all breakpoints */}
         <Topbar />
-        <main className="flex-1">
+        <main className="flex-1 bg-gradient-to-br from-primary/10 via-muted to-background">
           <div className="mx-auto p-4 md:p-8">{children}</div>
         </main>
       </div>
