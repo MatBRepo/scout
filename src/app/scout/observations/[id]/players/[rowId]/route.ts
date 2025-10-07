@@ -1,10 +1,19 @@
 // src/app/scout/observations/[id]/players/[rowId]/route.ts
 import { NextResponse } from "next/server"
 import { createClient } from "@/lib/supabase/server"
-import type { SupabaseClient } from "@supabase/supabase-js" // add this
-
+import type { SupabaseClient } from "@supabase/supabase-js"
 
 export const dynamic = "force-dynamic"
+
+const OP_ROW_SELECT = `
+  id, observation_id, player_id, player_entry_id,
+  minutes_watched, rating,
+  offense_rating, defense_rating, technique_rating, motor_rating,
+  played_position,
+  notes,
+  players ( id, full_name, image_url, transfermarkt_url ),
+  scout_player_entries ( id, full_name, image_url, transfermarkt_url )
+`
 
 type GuardResult =
   | { ok: true }
@@ -15,20 +24,22 @@ async function assertOwner(
   rowId: string,
   userId: string
 ): Promise<GuardResult> {
-  const { data: row } = await supabase
+  const { data: row, error: rowErr } = await supabase
     .from("observation_players")
     .select("id, observation_id")
     .eq("id", rowId)
     .maybeSingle()
 
+  if (rowErr) return { ok: false, status: 400, error: rowErr.message }
   if (!row) return { ok: false, status: 404, error: "Row not found" }
 
-  const { data: obs } = await supabase
+  const { data: obs, error: obsErr } = await supabase
     .from("observation_sessions")
     .select("id, scout_id")
     .eq("id", row.observation_id)
     .maybeSingle()
 
+  if (obsErr) return { ok: false, status: 400, error: obsErr.message }
   if (!obs) return { ok: false, status: 404, error: "Observation not found" }
   if (obs.scout_id !== userId) return { ok: false, status: 403, error: "Forbidden" }
 
@@ -42,9 +53,7 @@ export async function PATCH(
   const { rowId } = await ctx.params
   const supabase = await createClient()
 
-  const {
-    data: { user },
-  } = await supabase.auth.getUser()
+  const { data: { user } } = await supabase.auth.getUser()
   if (!user) return NextResponse.json({ error: "Not authenticated" }, { status: 401 })
 
   const guard = await assertOwner(supabase, rowId, user.id)
@@ -52,32 +61,36 @@ export async function PATCH(
 
   const body = (await req.json().catch(() => ({}))) as Record<string, unknown>
 
-  // Build a sparse update object so we don’t wipe fields unintentionally
-  const update: {
-    minutes_watched?: number | null
-    rating?: number | null
-    notes?: string | null
-  } = {}
+  // Allow only known fields (superset from your [opId] handler)
+  const allowed = [
+    "minutes_watched",
+    "rating",
+    "notes",
+    "offense_rating",
+    "defense_rating",
+    "technique_rating",
+    "motor_rating",
+    "played_position",
+  ] as const
 
-  if ("minutes_watched" in body) {
-    update.minutes_watched =
-      typeof body.minutes_watched === "number" ? body.minutes_watched : null
-  }
-  if ("rating" in body) {
-    update.rating = typeof body.rating === "number" ? body.rating : null
-  }
-  if ("notes" in body) {
-    update.notes = typeof body.notes === "string" ? body.notes : null
+  const patch: Record<string, any> = {}
+  for (const k of allowed) {
+    if (k in body) patch[k] = (body as any)[k] ?? null
   }
 
-  if (Object.keys(update).length === 0) {
+  if (Object.keys(patch).length === 0) {
     return NextResponse.json({ error: "No valid fields to update" }, { status: 400 })
   }
 
-  const { error } = await supabase.from("observation_players").update(update).eq("id", rowId)
-  if (error) return NextResponse.json({ error: error.message }, { status: 400 })
+  const { data, error } = await supabase
+    .from("observation_players")
+    .update(patch)
+    .eq("id", rowId)
+    .select(OP_ROW_SELECT)
+    .maybeSingle()
 
-  return NextResponse.json({ ok: true })
+  if (error) return NextResponse.json({ error: error.message }, { status: 400 })
+  return NextResponse.json({ ok: true, row: data })
 }
 
 export async function DELETE(
@@ -87,16 +100,17 @@ export async function DELETE(
   const { rowId } = await ctx.params
   const supabase = await createClient()
 
-  const {
-    data: { user },
-  } = await supabase.auth.getUser()
+  const { data: { user } } = await supabase.auth.getUser()
   if (!user) return NextResponse.json({ error: "Not authenticated" }, { status: 401 })
 
   const guard = await assertOwner(supabase, rowId, user.id)
   if (!guard.ok) return NextResponse.json({ error: guard.error }, { status: guard.status })
 
-  const { error } = await supabase.from("observation_players").delete().eq("id", rowId)
-  if (error) return NextResponse.json({ error: error.message }, { status: 400 })
+  const { error } = await supabase
+    .from("observation_players")
+    .delete()
+    .eq("id", rowId)
 
+  if (error) return NextResponse.json({ error: error.message }, { status: 400 })
   return NextResponse.json({ ok: true })
 }

@@ -1055,14 +1055,14 @@ export default function ObservationEditor({ session: initial, rows: initialRows 
 
                 {/* Text notes */}
                 <div className="mt-3">
-<Textarea
-  rows={2}
-  className="w-full resize-y"
-  value={(dirty[row.id]?.notes ?? row.notes) ?? ""}   // ← was defaultValue
-  onChange={(e) => setRowDraft(row.id, { notes: e.target.value })}
-  placeholder="Notatki do tego zawodnika…"
-  aria-label="Player notes"
-/>
+                <Textarea
+                  rows={2}
+                  className="w-full resize-y"
+                  value={(dirty[row.id]?.notes ?? row.notes) ?? ""}   // ← was defaultValue
+                  onChange={(e) => setRowDraft(row.id, { notes: e.target.value })}
+                  placeholder="Notatki do tego zawodnika…"
+                  aria-label="Player notes"
+                />
                 </div>
 
                 {/* Voice notes panel */}
