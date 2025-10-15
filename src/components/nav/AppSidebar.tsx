@@ -268,6 +268,10 @@ function AccountDropdown({
         <DropdownMenuItem asChild><Link href="/scout/my-players">{t('nav.myPlayers')}</Link></DropdownMenuItem>
         <DropdownMenuItem asChild><Link href="/scout/observations">{t('nav.observations')}</Link></DropdownMenuItem>
 
+        {/* Leads */}
+        <DropdownMenuItem asChild><Link href="/scout/leads">Leads</Link></DropdownMenuItem>
+        <DropdownMenuItem asChild><Link href="/scout/leads/new">— Add lead</Link></DropdownMenuItem>
+
         {canDiscover && (
           <>
             <DropdownMenuItem asChild><Link href="/scout/discover">{t('nav.discover')}</Link></DropdownMenuItem>
@@ -276,6 +280,7 @@ function AccountDropdown({
           </>
         )}
 
+        {/* Known player */}
         <DropdownMenuItem asChild><Link href="/scout/players/new">{t('nav.addPlayer')}</Link></DropdownMenuItem>
 
         {role === 'admin' && (
@@ -287,6 +292,7 @@ function AccountDropdown({
             </DropdownMenuLabel>
             <DropdownMenuItem asChild><Link href="/admin">Dashboard</Link></DropdownMenuItem>
             <DropdownMenuItem asChild><Link href="/admin/players">{t('nav.admin.allPlayers')}</Link></DropdownMenuItem>
+            <DropdownMenuItem asChild><Link href="/admin/leads">Leads (grouped)</Link></DropdownMenuItem>
             <DropdownMenuItem asChild><Link href="/admin/scouts">{t('nav.admin.scouts')}</Link></DropdownMenuItem>
             <DropdownMenuItem asChild><Link href="/admin/duplicates">{t('nav.admin.duplicates')}</Link></DropdownMenuItem>
           </>
@@ -412,6 +418,12 @@ export function AppSidebar() {
         <NavItem collapsed={collapsed} href="/scout/my-players" label={t('nav.myPlayers')} icon={<UserCircle2 className="h-4 w-4" />} onClick={closeMobile} />
         <NavItem collapsed={collapsed} href="/scout/observations" label={t('nav.observations')} icon={<Binoculars className="h-4 w-4" />} onClick={closeMobile} />
 
+        {/* Leads (unknown player flow) */}
+        <NavItem collapsed={collapsed} href="/scout/leads" label="Leads" icon={<ListChecks className="h-4 w-4" />} onClick={closeMobile} />
+        <div className={cn('ml-7', collapsed && 'hidden')}>
+          <NavItem collapsed={false} href="/scout/leads/new" label="Add lead" icon={<PlusCircle className="h-4 w-4" />} onClick={closeMobile} />
+        </div>
+
         {canDiscover && (
           <>
             <NavItem collapsed={collapsed} href="/scout/discover" label={t('nav.discover')} icon={<Compass className="h-4 w-4" />} onClick={closeMobile} />
@@ -422,6 +434,7 @@ export function AppSidebar() {
           </>
         )}
 
+        {/* Known player flow */}
         <NavItem collapsed={collapsed} href="/scout/players/new" label={t('nav.addPlayer')} icon={<PlusCircle className="h-4 w-4" />} onClick={closeMobile} />
       </nav>
     </>
@@ -433,9 +446,9 @@ export function AppSidebar() {
       <SectionHeader collapsed={collapsed}>{t('sections.admin')}</SectionHeader>
       <nav className="space-y-1">
         <NavItem collapsed={collapsed} href="/admin/players" label={t('nav.admin.allPlayers')} icon={<Users className="h-4 w-4" />} onClick={closeMobile} />
+        <NavItem collapsed={collapsed} href="/admin/leads" label="Leads (grouped)" icon={<ListChecks className="h-4 w-4" />} onClick={closeMobile} />
         <NavItem collapsed={collapsed} href="/admin/duplicates" label={t('nav.admin.duplicates')} icon={<ListChecks className="h-4 w-4" />} onClick={closeMobile} />
         <NavItem collapsed={collapsed} href="/admin/scouts" label={t('nav.admin.scouts')} icon={<Shield className="h-4 w-4" />} onClick={closeMobile} />
-
         <NavItem collapsed={collapsed} href="/admin/scraper" label={t('nav.admin.scraper')} icon={<Database className="h-4 w-4" />} onClick={closeMobile} />
         <div className={cn('ml-7', collapsed && 'hidden')}>
           <NavItem collapsed={false} href="/admin/scraper/data" label={t('nav.admin.scraperData')} icon={<Table className="h-4 w-4" />} onClick={closeMobile} />
@@ -464,7 +477,6 @@ export function AppSidebar() {
           }}
         />
       </div>
-      {/* Keep toggles only at the bottom */}
       {!collapsed && (
         <div className="mt-2 grid grid-cols-2 gap-2">
           <LanguageToggle />

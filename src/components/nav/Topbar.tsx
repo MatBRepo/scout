@@ -212,15 +212,7 @@ export function Topbar() {
             </Button>
           </div>
 
-          {/* Role tag (if logged in) */}
-          {!loading && (role || email) && (
-            <div className="hidden items-center gap-2 sm:flex">
-              <RoleBadge role={role} />
-              <span className="rounded-full bg-muted px-2 py-1 text-[11px] font-medium text-muted-foreground">
-                {initials}
-              </span>
-            </div>
-          )}
+
         </div>
       </div>
 
