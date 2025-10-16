@@ -1,6 +1,19 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+/**
+ * NOTE about Next.js viewport/metadata:
+ * Do NOT export `generateViewport` or `generateMetadata` from this client file.
+ * Put them in a Server Component, e.g. app/layout.tsx (no "use client"):
+ *
+ * // app/layout.tsx
+ * export const viewport = { width: "device-width", initialScale: 1 };
+ * // or:
+ * export async function generateViewport() {
+ *   return { width: "device-width", initialScale: 1 };
+ * }
+ */
+
+import { useEffect, useMemo, useState, type ComponentType } from "react";
 
 // shadcn/ui
 import { Card, CardHeader, CardTitle, CardDescription, CardContent } from "@/components/ui/card";
@@ -30,6 +43,7 @@ import {
   AccordionTrigger,
   AccordionContent,
 } from "@/components/ui/accordion";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 
 // icons
 import {
@@ -59,6 +73,15 @@ import {
   Sun,
   Bell,
   CheckCircle2,
+  MapPin,
+  Phone,
+  Mail,
+  Link,
+  Scale,
+  Ruler,
+  HeartPulse,
+  FileText,
+  BarChart3,
 } from "lucide-react";
 
 /**
@@ -70,9 +93,9 @@ import {
  */
 
 type Role = "Administrator" | "Scout Agent" | "Scout";
-type PageKey = "players" | "add" | "unidentified" | "mybase" | "obs" | "settings" | "roles";
+type PageKey = "players" | "add" | "unidentified" | "mybase" | "obs" | "settings" | "roles" | "player-editor";
 
-type NavNode = { key: string; label: string; icon?: React.ComponentType<any>; page?: PageKey; children?: NavNode[] };
+type NavNode = { key: string; label: string; icon?: ComponentType<any>; page?: PageKey; children?: NavNode[] };
 
 type Player = {
   id: number;
@@ -81,6 +104,30 @@ type Player = {
   pos: "GK" | "DF" | "MF" | "FW";
   age: number;
   status: "active" | "trash";
+  // Extended player details
+  firstName?: string;
+  lastName?: string;
+  birthDate?: string;
+  nationality?: string;
+  height?: number;
+  weight?: number;
+  foot?: "left" | "right" | "both";
+  // Scout notes
+  scoutNotes?: ScoutNotes;
+};
+
+type ScoutNotes = {
+  motorSkills: { rating: number; comment: string };
+  strength: { rating: number; comment: string };
+  technique: { rating: number; comment: string };
+  movesWithBall: { rating: number; comment: string };
+  movesWithoutBall: { rating: number; comment: string };
+  setPieces: { rating: number; comment: string };
+  defensivePhase: { rating: number; comment: string };
+  attackingPhase: { rating: number; comment: string };
+  transitionalPhases: { rating: number; comment: string };
+  attitude: { rating: number; comment: string };
+  finalComment: string;
 };
 
 type Observation = {
@@ -294,112 +341,519 @@ function NotificationsBell({
   );
 }
 
-// ===== Player Editor (modal) =====
-function PlayerEditor({
-  open,
+// ===== Player Editor Page =====
+function PlayerEditorPage({
   player,
-  onClose,
   onSave,
-  onAddObservation,
-  toast,
+  onClose,
 }: {
-  open: boolean;
-  player: Player | null;
-  onClose: () => void;
+  player: Player;
   onSave: (p: Player) => void;
-  onAddObservation: (playerName: string) => void;
-  toast: ReturnType<typeof useToasts>["show"];
+  onClose: () => void;
 }) {
-  const [draft, setDraft] = useState<Player | null>(player);
-  const [saving, setSaving] = useState<"idle" | "saving" | "saved">("idle");
-  useEffect(() => setDraft(player), [player]);
+  const [activeTab, setActiveTab] = useState("basic");
+  const [draft, setDraft] = useState<Player>(player);
+
+  // Initialize scout notes if not present
   useEffect(() => {
-    if (saving === "saving") {
-      const t = setTimeout(() => setSaving("saved"), 800);
-      return () => clearTimeout(t);
+    if (!draft.scoutNotes) {
+      setDraft(prev => ({
+        ...prev,
+        scoutNotes: {
+          motorSkills: { rating: 0, comment: "" },
+          strength: { rating: 0, comment: "" },
+          technique: { rating: 0, comment: "" },
+          movesWithBall: { rating: 0, comment: "" },
+          movesWithoutBall: { rating: 0, comment: "" },
+          setPieces: { rating: 0, comment: "" },
+          defensivePhase: { rating: 0, comment: "" },
+          attackingPhase: { rating: 0, comment: "" },
+          transitionalPhases: { rating: 0, comment: "" },
+          attitude: { rating: 0, comment: "" },
+          finalComment: "",
+        }
+      }));
     }
-  }, [saving]);
-  if (!open || !draft) return null;
-  function save() {
-    setSaving("saving");
-    setTimeout(() => {
-      onSave(draft);
-      toast({ message: `Zapisano ${draft.name}` });
-      onClose();
-    }, 250);
-  }
+  }, [draft.scoutNotes]);
+
+  const handleSave = () => {
+    onSave(draft);
+  };
+
+
+const EMPTY_SCOUT_NOTES: ScoutNotes = {
+  motorSkills: { rating: 0, comment: "" },
+  strength: { rating: 0, comment: "" },
+  technique: { rating: 0, comment: "" },
+  movesWithBall: { rating: 0, comment: "" },
+  movesWithoutBall: { rating: 0, comment: "" },
+  setPieces: { rating: 0, comment: "" },
+  defensivePhase: { rating: 0, comment: "" },
+  attackingPhase: { rating: 0, comment: "" },
+  transitionalPhases: { rating: 0, comment: "" },
+  attitude: { rating: 0, comment: "" },
+  finalComment: "",
+};
+
+
+type RatingNoteKey = Exclude<keyof ScoutNotes, "finalComment">;
+
+function updateScoutNote<K extends RatingNoteKey>(category: K, field: "rating", value: number): void;
+function updateScoutNote<K extends RatingNoteKey>(category: K, field: "comment", value: string): void;
+function updateScoutNote<K extends RatingNoteKey>(
+  category: K,
+  field: "rating" | "comment",
+  value: number | string
+) {
+  setDraft(prev => {
+    const notes = prev.scoutNotes ?? EMPTY_SCOUT_NOTES;
+    return {
+      ...prev,
+      scoutNotes: {
+        ...notes,
+        [category]: {
+          ...notes[category],
+          [field]: value as any, // safe due to overloads above
+        },
+      },
+    };
+  });
+}
+
   return (
-    <div className="fixed inset-0 z-50 flex items-end justify-center md:items-center" role="dialog" aria-modal onClick={onClose}>
-      <div className="absolute inset-0 bg-black/30" />
-      <div
-        className="relative z-10 w-full max-w-lg rounded-t-xl border border-gray-200 bg-white p-4 shadow dark:border-neutral-700 dark:bg-neutral-900 md:rounded-xl"
-        onClick={(e) => e.stopPropagation()}
-      >
-        <div className="mb-3 flex items-center justify-between">
-          <div className="text-sm font-medium text-gray-900 dark:text-neutral-100">Edytuj zawodnika</div>
-          <button className="rounded p-1 hover:bg-gray-50 dark:hover:bg-neutral-800" onClick={onClose} aria-label="Zamknij">
-            <X className="h-5 w-5" />
-          </button>
-        </div>
-        <div className="grid gap-2">
-          <div>
-            <Label className="text-gray-700 dark:text-neutral-300">Imię i nazwisko</Label>
-            <Input className="border-gray-300 dark:border-neutral-700 dark:bg-neutral-950" value={draft.name} onChange={(e) => setDraft({ ...draft, name: e.target.value })} />
-          </div>
-          <div className="grid grid-cols-2 gap-2">
-            <div>
-              <Label className="text-gray-700 dark:text-neutral-300">Klub</Label>
-              <Input className="border-gray-300 dark:border-neutral-700 dark:bg-neutral-950" value={draft.club} onChange={(e) => setDraft({ ...draft, club: e.target.value })} />
-            </div>
-            <div>
-              <Label className="text-gray-700 dark:text-neutral-300">Pozycja</Label>
-              <Select value={draft.pos} onValueChange={(v) => setDraft({ ...draft, pos: v as Player["pos"] })}>
-                <SelectTrigger className="border-gray-300 dark:border-neutral-700 dark:bg-neutral-950">
-                  <SelectValue placeholder="Wybierz" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="GK">GK</SelectItem>
-                  <SelectItem value="DF">DF</SelectItem>
-                  <SelectItem value="MF">MF</SelectItem>
-                  <SelectItem value="FW">FW</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
-          </div>
-          <div className="grid grid-cols-2 gap-2">
-            <div>
-              <Label className="text-gray-700 dark:text-neutral-300">Wiek</Label>
-              <Input type="number" className="border-gray-300 dark:border-neutral-700 dark:bg-neutral-950" value={draft.age} onChange={(e) => setDraft({ ...draft, age: parseInt(e.target.value || "0") })} />
-            </div>
-            <div>
-              <Label className="text-gray-700 dark:text-neutral-300">Status</Label>
-              <Select value={draft.status} onValueChange={(v) => setDraft({ ...draft, status: v as Player["status"] })}>
-                <SelectTrigger className="border-gray-300 dark:border-neutral-700 dark:bg-neutral-950">
-                  <SelectValue placeholder="Wybierz" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="active">active</SelectItem>
-                  <SelectItem value="trash">trash</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
-          </div>
-        </div>
-        <div className="mt-4 flex items-center justify-between">
-          <div className="text-xs text-gray-500 dark:text-neutral-400">
-            {saving === "saving" ? "Zapisywanie…" : saving === "saved" ? "Zapisano ✓" : " "}
-          </div>
+    <div className="w-full">
+      <Crumb items={[
+        { label: "Start", href: "/" }, 
+        { label: "Baza zawodników", href: "#" }, 
+        { label: player.name }
+      ]} />
+      
+      <Toolbar
+        title={`Edytuj zawodnika: ${player.name}`}
+        subtitle="Kompleksowy profil zawodnika"
+        right={
           <div className="flex items-center gap-2">
-            <Button size="sm" variant="outline" className="h-8 border-gray-300 dark:border-neutral-700" onClick={() => onAddObservation(draft.name)}>
-              <PlusCircle className="mr-1 h-4 w-4" />
-              Dodaj obserwację
+            <Button variant="outline" className="border-gray-300 dark:border-neutral-700" onClick={onClose}>
+              Anuluj
             </Button>
-            <Button size="sm" className="h-8 bg-gray-900 text-white hover:bg-gray-800" onClick={save}>
-              Zapisz
+            <Button className="bg-gray-900 text-white hover:bg-gray-800" onClick={handleSave}>
+              <Save className="mr-2 h-4 w-4" />
+              Zapisz zmiany
             </Button>
           </div>
+        }
+      />
+
+      <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-4">
+        <TabsList className="grid w-full grid-cols-7">
+          <TabsTrigger value="basic">Podstawowe</TabsTrigger>
+          <TabsTrigger value="club">Klub</TabsTrigger>
+          <TabsTrigger value="physical">Fizyczne</TabsTrigger>
+          <TabsTrigger value="contact">Kontakt</TabsTrigger>
+          <TabsTrigger value="contract">Kontrakt</TabsTrigger>
+          <TabsTrigger value="stats">Statystyki</TabsTrigger>
+          <TabsTrigger value="scout">Notatki skauta</TabsTrigger>
+        </TabsList>
+
+        <TabsContent value="basic" className="space-y-4">
+          <Card className="border-gray-300 dark:border-neutral-700">
+            <CardHeader>
+              <CardTitle className="text-gray-900 dark:text-neutral-100">Informacje podstawowe</CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <Label className="text-gray-700 dark:text-neutral-300">Imię</Label>
+                  <Input 
+                    value={draft.firstName || ""} 
+                    onChange={(e) => setDraft({...draft, firstName: e.target.value})}
+                    className="border-gray-300 dark:border-neutral-700 dark:bg-neutral-950" 
+                  />
+                </div>
+                <div>
+                  <Label className="text-gray-700 dark:text-neutral-300">Nazwisko</Label>
+                  <Input 
+                    value={draft.lastName || ""} 
+                    onChange={(e) => setDraft({...draft, lastName: e.target.value})}
+                    className="border-gray-300 dark:border-neutral-700 dark:bg-neutral-950" 
+                  />
+                </div>
+              </div>
+              
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <Label className="text-gray-700 dark:text-neutral-300">Data urodzenia</Label>
+                  <Input 
+                    type="date" 
+                    value={draft.birthDate || ""} 
+                    onChange={(e) => setDraft({...draft, birthDate: e.target.value})}
+                    className="border-gray-300 dark:border-neutral-700 dark:bg-neutral-950" 
+                  />
+                </div>
+                <div>
+                  <Label className="text-gray-700 dark:text-neutral-300">Narodowość</Label>
+                  <Input 
+                    value={draft.nationality || ""} 
+                    onChange={(e) => setDraft({...draft, nationality: e.target.value})}
+                    className="border-gray-300 dark:border-neutral-700 dark:bg-neutral-950" 
+                  />
+                </div>
+              </div>
+
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <Label className="text-gray-700 dark:text-neutral-300">Pozycja</Label>
+                  <Select value={draft.pos} onValueChange={(v) => setDraft({...draft, pos: v as Player["pos"]})}>
+                    <SelectTrigger className="border-gray-300 dark:border-neutral-700 dark:bg-neutral-950">
+                      <SelectValue placeholder="Wybierz" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="GK">Bramkarz</SelectItem>
+                      <SelectItem value="DF">Obrońca</SelectItem>
+                      <SelectItem value="MF">Pomocnik</SelectItem>
+                      <SelectItem value="FW">Napastnik</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div>
+                  <Label className="text-gray-700 dark:text-neutral-300">Wiek</Label>
+                  <Input 
+                    type="number" 
+                    value={draft.age} 
+                    onChange={(e) => setDraft({...draft, age: parseInt(e.target.value) || 0})}
+                    className="border-gray-300 dark:border-neutral-700 dark:bg-neutral-950" 
+                  />
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+        </TabsContent>
+
+        <TabsContent value="club" className="space-y-4">
+          <Card className="border-gray-300 dark:border-neutral-700">
+            <CardHeader>
+              <CardTitle className="text-gray-900 dark:text-neutral-100">Informacje klubowe</CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              <div>
+                <Label className="text-gray-700 dark:text-neutral-300">Aktualny klub</Label>
+                <Input 
+                  value={draft.club} 
+                  onChange={(e) => setDraft({...draft, club: e.target.value})}
+                  className="border-gray-300 dark:border-neutral-700 dark:bg-neutral-950" 
+                />
+              </div>
+              <div>
+                <Label className="text-gray-700 dark:text-neutral-300">Poprzednie kluby</Label>
+                <Textarea 
+                  placeholder="Wymień poprzednie kluby..."
+                  className="border-gray-300 dark:border-neutral-700 dark:bg-neutral-950" 
+                />
+              </div>
+            </CardContent>
+          </Card>
+        </TabsContent>
+
+        <TabsContent value="physical" className="space-y-4">
+          <Card className="border-gray-300 dark:border-neutral-700">
+            <CardHeader>
+              <CardTitle className="text-gray-900 dark:text-neutral-100">Dane fizyczne</CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <Label className="flex items-center gap-2 text-gray-700 dark:text-neutral-300">
+                    <Ruler className="h-4 w-4" />
+                    Wzrost (cm)
+                  </Label>
+                  <Input 
+                    type="number" 
+                    value={draft.height || ""} 
+                    onChange={(e) => setDraft({...draft, height: parseInt(e.target.value) || 0})}
+                    className="border-gray-300 dark:border-neutral-700 dark:bg-neutral-950" 
+                  />
+                </div>
+                <div>
+                  <Label className="flex items-center gap-2 text-gray-700 dark:text-neutral-300">
+                    <Scale className="h-4 w-4" />
+                    Waga (kg)
+                  </Label>
+                  <Input 
+                    type="number" 
+                    value={draft.weight || ""} 
+                    onChange={(e) => setDraft({...draft, weight: parseInt(e.target.value) || 0})}
+                    className="border-gray-300 dark:border-neutral-700 dark:bg-neutral-950" 
+                  />
+                </div>
+              </div>
+              <div>
+                <Label className="text-gray-700 dark:text-neutral-300">Preferowana noga</Label>
+                <Select value={draft.foot} onValueChange={(v) => setDraft({...draft, foot: v as any})}>
+                  <SelectTrigger className="border-gray-300 dark:border-neutral-700 dark:bg-neutral-950">
+                    <SelectValue placeholder="Wybierz" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="left">Lewa</SelectItem>
+                    <SelectItem value="right">Prawa</SelectItem>
+                    <SelectItem value="both">Obunożny</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+            </CardContent>
+          </Card>
+        </TabsContent>
+
+        <TabsContent value="contact" className="space-y-4">
+          <Card className="border-gray-300 dark:border-neutral-700">
+            <CardHeader>
+              <CardTitle className="text-gray-900 dark:text-neutral-100">Dane kontaktowe</CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <Label className="flex items-center gap-2 text-gray-700 dark:text-neutral-300">
+                    <Phone className="h-4 w-4" />
+                    Telefon
+                  </Label>
+                  <Input className="border-gray-300 dark:border-neutral-700 dark:bg-neutral-950" />
+                </div>
+                <div>
+                  <Label className="flex items-center gap-2 text-gray-700 dark:text-neutral-300">
+                    <Mail className="h-4 w-4" />
+                    Email
+                  </Label>
+                  <Input className="border-gray-300 dark:border-neutral-700 dark:bg-neutral-950" />
+                </div>
+              </div>
+              <div>
+                <Label className="flex items-center gap-2 text-gray-700 dark:text-neutral-300">
+                  <MapPin className="h-4 w-4" />
+                  Adres
+                </Label>
+                <Textarea className="border-gray-300 dark:border-neutral-700 dark:bg-neutral-950" />
+              </div>
+            </CardContent>
+          </Card>
+        </TabsContent>
+
+        <TabsContent value="contract" className="space-y-4">
+          <Card className="border-gray-300 dark:border-neutral-700">
+            <CardHeader>
+              <CardTitle className="text-gray-900 dark:text-neutral-100">Informacje kontraktowe</CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <Label className="text-gray-700 dark:text-neutral-300">Data rozpoczęcia</Label>
+                  <Input type="date" className="border-gray-300 dark:border-neutral-700 dark:bg-neutral-950" />
+                </div>
+                <div>
+                  <Label className="text-gray-700 dark:text-neutral-300">Data zakończenia</Label>
+                  <Input type="date" className="border-gray-300 dark:border-neutral-700 dark:bg-neutral-950" />
+                </div>
+              </div>
+              <div>
+                <Label className="text-gray-700 dark:text-neutral-300">Wynagrodzenie</Label>
+                <Input className="border-gray-300 dark:border-neutral-700 dark:bg-neutral-950" />
+              </div>
+              <div>
+                <Label className="text-gray-700 dark:text-neutral-300">Klauzula odejścia</Label>
+                <Input className="border-gray-300 dark:border-neutral-700 dark:bg-neutral-950" />
+              </div>
+            </CardContent>
+          </Card>
+        </TabsContent>
+
+        <TabsContent value="stats" className="space-y-4">
+          <Card className="border-gray-300 dark:border-neutral-700">
+            <CardHeader>
+              <CardTitle className="text-gray-900 dark:text-neutral-100">Statystyki</CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              <div className="grid grid-cols-3 gap-4">
+                <div>
+                  <Label className="text-gray-700 dark:text-neutral-300">Mecze</Label>
+                  <Input type="number" className="border-gray-300 dark:border-neutral-700 dark:bg-neutral-950" />
+                </div>
+                <div>
+                  <Label className="text-gray-700 dark:text-neutral-300">Gole</Label>
+                  <Input type="number" className="border-gray-300 dark:border-neutral-700 dark:bg-neutral-950" />
+                </div>
+                <div>
+                  <Label className="text-gray-700 dark:text-neutral-300">Asysty</Label>
+                  <Input type="number" className="border-gray-300 dark:border-neutral-700 dark:bg-neutral-950" />
+                </div>
+              </div>
+              <div>
+                <Label className="text-gray-700 dark:text-neutral-300">Notatki do statystyk</Label>
+                <Textarea className="border-gray-300 dark:border-neutral-700 dark:bg-neutral-950" />
+              </div>
+            </CardContent>
+          </Card>
+        </TabsContent>
+
+        <TabsContent value="scout" className="space-y-4">
+          <Card className="border-gray-300 dark:border-neutral-700">
+            <CardHeader>
+              <CardTitle className="text-gray-900 dark:text-neutral-100">Notatki skauta</CardTitle>
+              <CardDescription className="text-gray-500 dark:text-neutral-400">
+                Ocena w skali 1-6 (1 = słabo, 3-4 = solidnie, 6 = elitarnie)
+              </CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-6">
+              {/* Motor Skills */}
+              <ScoutNoteSection
+                title="Umiejętności motoryczne – szybkość, wytrzymałość"
+                rating={draft.scoutNotes?.motorSkills.rating || 0}
+                comment={draft.scoutNotes?.motorSkills.comment || ""}
+                onRatingChange={(rating) => updateScoutNote('motorSkills', 'rating', rating)}
+                onCommentChange={(comment) => updateScoutNote('motorSkills', 'comment', comment)}
+              />
+
+              {/* Strength */}
+              <ScoutNoteSection
+                title="Siła, pojedynki, zwinność"
+                rating={draft.scoutNotes?.strength.rating || 0}
+                comment={draft.scoutNotes?.strength.comment || ""}
+                onRatingChange={(rating) => updateScoutNote('strength', 'rating', rating)}
+                onCommentChange={(comment) => updateScoutNote('strength', 'comment', comment)}
+              />
+
+              {/* Technique */}
+              <ScoutNoteSection
+                title="Technika"
+                rating={draft.scoutNotes?.technique.rating || 0}
+                comment={draft.scoutNotes?.technique.comment || ""}
+                onRatingChange={(rating) => updateScoutNote('technique', 'rating', rating)}
+                onCommentChange={(comment) => updateScoutNote('technique', 'comment', comment)}
+              />
+
+              {/* Moves with ball */}
+              <ScoutNoteSection
+                title="Ruchy z piłką"
+                rating={draft.scoutNotes?.movesWithBall.rating || 0}
+                comment={draft.scoutNotes?.movesWithBall.comment || ""}
+                onRatingChange={(rating) => updateScoutNote('movesWithBall', 'rating', rating)}
+                onCommentChange={(comment) => updateScoutNote('movesWithBall', 'comment', comment)}
+              />
+
+              {/* Moves without ball */}
+              <ScoutNoteSection
+                title="Ruchy bez piłki"
+                rating={draft.scoutNotes?.movesWithoutBall.rating || 0}
+                comment={draft.scoutNotes?.movesWithoutBall.comment || ""}
+                onRatingChange={(rating) => updateScoutNote('movesWithoutBall', 'rating', rating)}
+                onCommentChange={(comment) => updateScoutNote('movesWithoutBall', 'comment', comment)}
+              />
+
+              {/* Set pieces */}
+              <ScoutNoteSection
+                title="Stałe fragmenty"
+                rating={draft.scoutNotes?.setPieces.rating || 0}
+                comment={draft.scoutNotes?.setPieces.comment || ""}
+                onRatingChange={(rating) => updateScoutNote('setPieces', 'rating', rating)}
+                onCommentChange={(comment) => updateScoutNote('setPieces', 'comment', comment)}
+              />
+
+              {/* Defensive phase */}
+              <ScoutNoteSection
+                title="Faza obrony"
+                rating={draft.scoutNotes?.defensivePhase.rating || 0}
+                comment={draft.scoutNotes?.defensivePhase.comment || ""}
+                onRatingChange={(rating) => updateScoutNote('defensivePhase', 'rating', rating)}
+                onCommentChange={(comment) => updateScoutNote('defensivePhase', 'comment', comment)}
+              />
+
+              {/* Attacking phase */}
+              <ScoutNoteSection
+                title="Faza ataku"
+                rating={draft.scoutNotes?.attackingPhase.rating || 0}
+                comment={draft.scoutNotes?.attackingPhase.comment || ""}
+                onRatingChange={(rating) => updateScoutNote('attackingPhase', 'rating', rating)}
+                onCommentChange={(comment) => updateScoutNote('attackingPhase', 'comment', comment)}
+              />
+
+              {/* Transitional phases */}
+              <ScoutNoteSection
+                title="Fazy przejściowe"
+                rating={draft.scoutNotes?.transitionalPhases.rating || 0}
+                comment={draft.scoutNotes?.transitionalPhases.comment || ""}
+                onRatingChange={(rating) => updateScoutNote('transitionalPhases', 'rating', rating)}
+                onCommentChange={(comment) => updateScoutNote('transitionalPhases', 'comment', comment)}
+              />
+
+              {/* Attitude */}
+              <ScoutNoteSection
+                title="Postawa (mentalność)"
+                rating={draft.scoutNotes?.attitude.rating || 0}
+                comment={draft.scoutNotes?.attitude.comment || ""}
+                onRatingChange={(rating) => updateScoutNote('attitude', 'rating', rating)}
+                onCommentChange={(comment) => updateScoutNote('attitude', 'comment', comment)}
+              />
+
+              {/* Final comment */}
+              <div>
+                <Label className="text-gray-700 dark:text-neutral-300">Komentarz końcowy</Label>
+                <Textarea 
+                  value={draft.scoutNotes?.finalComment || ""}
+                  onChange={(e) => setDraft({
+                    ...draft, 
+                    scoutNotes: {...draft.scoutNotes!, finalComment: e.target.value}
+                  })}
+                  placeholder="Podsumowanie obserwacji..."
+                  className="min-h-[100px] border-gray-300 dark:border-neutral-700 dark:bg-neutral-950"
+                />
+              </div>
+            </CardContent>
+          </Card>
+        </TabsContent>
+      </Tabs>
+    </div>
+  );
+}
+
+function ScoutNoteSection({
+  title,
+  rating,
+  comment,
+  onRatingChange,
+  onCommentChange,
+}: {
+  title: string;
+  rating: number;
+  comment: string;
+  onRatingChange: (rating: number) => void;
+  onCommentChange: (comment: string) => void;
+}) {
+  return (
+    <div className="space-y-3">
+      <div className="flex items-center justify-between">
+        <Label className="text-gray-700 dark:text-neutral-300">{title}</Label>
+        <div className="flex items-center gap-1">
+          {[1, 2, 3, 4, 5, 6].map((star) => (
+            <button
+              key={star}
+              type="button"
+              onClick={() => onRatingChange(star)}
+              className="p-0.5"
+              title={`${star}/6`}
+            >
+              <Star 
+                className="h-5 w-5 text-gray-900 dark:text-neutral-200" 
+                fill={star <= rating ? "currentColor" : "none"} 
+                strokeWidth={1.5} 
+              />
+            </button>
+          ))}
+          <span className="ml-2 text-sm text-gray-500 dark:text-neutral-400">{rating}/6</span>
         </div>
       </div>
+      <Textarea
+        value={comment}
+        onChange={(e) => onCommentChange(e.target.value)}
+        placeholder="Krótki komentarz..."
+        className="border-gray-300 dark:border-neutral-700 dark:bg-neutral-950"
+      />
     </div>
   );
 }
@@ -407,6 +861,9 @@ function PlayerEditor({
 // ===== My Players =====
 function MyPlayers({
   players,
+  observations,
+  onQuickAddObservation,
+  onOpenObservation,
   onOpenAdd,
   onTrash,
   onRestore,
@@ -415,6 +872,9 @@ function MyPlayers({
   toasts,
 }: {
   players: Player[];
+  observations: Observation[];
+  onQuickAddObservation: (playerName: string, p: { match: string; date: string; time: string; status: Observation["status"] }) => void;
+  onOpenObservation: (id: number) => void;
   onOpenAdd: () => void;
   onTrash: (id: number) => void;
   onRestore: (id: number) => void;
@@ -496,7 +956,7 @@ function MyPlayers({
   }
 
   // column manager (table)
-  const playerCols = ["select", "name", "club", "pos", "age", "status", "actions"] as const;
+  const playerCols = ["select", "name", "club", "pos", "age", "status", "obs", "actions"] as const;
   type PlayerCol = typeof playerCols[number];
   const [visibleCols, setVisibleCols] = useState<Record<PlayerCol, boolean>>({
     select: true,
@@ -505,6 +965,7 @@ function MyPlayers({
     pos: true,
     age: true,
     status: true,
+    obs: true,
     actions: true,
   });
   const [openColsPanel, setOpenColsPanel] = useState(false);
@@ -538,11 +999,30 @@ function MyPlayers({
         r.pos.toLowerCase().includes(q.toLowerCase()),
     );
 
+  // ===== NEW: profile completion + quick-add observation local state =====
+  function completionFor(playerName: string) {
+    const count = observations.filter((o) => o.player === playerName).length;
+    return Math.min(100, 30 + count * 12); // base 30% + 12% per obs
+  }
+  const [quickFor, setQuickFor] = useState<number | null>(null);
+  const [qa, setQa] = useState<{ match: string; date: string; time: string; status: Observation["status"] }>({
+    match: "",
+    date: "",
+    time: "",
+    status: "draft",
+  });
+  function submitQuick(playerName: string) {
+    if (!qa.match || !qa.date || !qa.time) return;
+    onQuickAddObservation(playerName, qa);
+    setQuickFor(null);
+    setQa({ match: "", date: "", time: "", status: "draft" });
+  }
+
   return (
     <div className="w-full">
-      <Crumb items={[{ label: "Start", href: "/" }, { label: "My Players" }]} />
+      <Crumb items={[{ label: "Start", href: "/" }, { label: "Baza zawodników" }]} />
       <Toolbar
-        title="My Players"
+        title="Baza zawodników"
         subtitle="Prywatna lista skauta"
         right={
           <div className="flex flex-wrap items-center gap-2">
@@ -550,7 +1030,7 @@ function MyPlayers({
             <div className="hidden overflow-hidden rounded-md border border-gray-300 dark:border-neutral-700 md:inline-flex">
               {(["active", "trash"] as const).map((s) => (
                 <button key={s} className={`px-3 py-1 text-sm ${scope === s ? "bg-gray-900 text-white" : "bg-white text-gray-700 dark:bg-neutral-900 dark:text-neutral-200"}`} onClick={() => setScope(s)}>
-                  {s}
+                  {s === "active" ? "aktywni" : "kosz"}
                 </button>
               ))}
             </div>
@@ -569,7 +1049,7 @@ function MyPlayers({
                     <div className="mb-2 grid grid-cols-4 gap-2">
                       {(["GK", "DF", "MF", "FW"] as const).map((p) => (
                         <label key={p} className="flex items-center justify-between rounded px-2 py-1 hover:bg-gray-50 dark:hover:bg-neutral-800">
-                          <span>{p}</span>
+                          <span>{p === "GK" ? "BR" : p === "DF" ? "OB" : p === "MF" ? "PO" : "NA"}</span>
                           <input type="checkbox" checked={pos[p]} onChange={(e) => setPos((prev) => ({ ...prev, [p]: e.target.checked }))} />
                         </label>
                       ))}
@@ -596,10 +1076,10 @@ function MyPlayers({
             {/* view toggle */}
             <div className="inline-flex overflow-hidden rounded-md border border-gray-300 dark:border-neutral-700">
               <button className={`px-3 py-1 text-sm ${mode === "grid" ? "bg-gray-900 text-white" : "bg-white text-gray-700 dark:bg-neutral-900 dark:text-neutral-200"}`} onClick={() => setMode("grid")}>
-                Grid
+                Siatka
               </button>
               <button className={`border-l border-gray-300 px-3 py-1 text-sm dark:border-neutral-700 ${mode === "table" ? "bg-gray-900 text-white" : "bg-white text-gray-700 dark:bg-neutral-900 dark:text-neutral-200"}`} onClick={() => setMode("table")}>
-                Table
+                Tabela
               </button>
             </div>
 
@@ -613,7 +1093,9 @@ function MyPlayers({
                   <div className="mb-1 text-xs font-medium text-gray-500 dark:text-neutral-400">Widoczność (tabela)</div>
                   {playerCols.map((c) => (
                     <label key={c} className="flex cursor-pointer items-center justify-between rounded px-2 py-1 text-sm hover:bg-gray-50 dark:hover:bg-neutral-800">
-                      <span className="capitalize text-gray-800 dark:text-neutral-100">{c}</span>
+                      <span className="capitalize text-gray-800 dark:text-neutral-100">
+                        {c === "select" ? "zaznacz" : c === "name" ? "nazwa" : c === "club" ? "klub" : c === "pos" ? "pozycja" : c === "age" ? "wiek" : c === "status" ? "status" : c === "obs" ? "obserwacje" : "akcje"}
+                      </span>
                       <input type="checkbox" checked={visibleCols[c]} onChange={(e) => setVisibleCols((prev) => ({ ...prev, [c]: e.target.checked }))} />
                     </label>
                   ))}
@@ -650,19 +1132,83 @@ function MyPlayers({
           {scope === "active" && <AddTile onClick={onOpenAdd} />}
           {filtered.map((r) => {
             const checked = selected.includes(r.id);
+            const playerObs = observations
+              .filter((o) => o.player === r.name)
+              .sort((a, b) => (b.date + b.time).localeCompare(a.date + a.time));
+
             return (
               <Card key={r.id} className="border-gray-300 dark:border-neutral-700">
                 <CardContent className="p-3">
+                  {/* smaller photo */}
                   <div className="mb-2 aspect-[4/3] rounded-md border border-gray-200 bg-gray-100 dark:border-neutral-700 dark:bg-neutral-800" />
+
                   <div className="flex items-center justify-between">
                     <div>
                       <div className="text-sm font-medium text-gray-900 dark:text-neutral-100">{r.name}</div>
-                      <div className="text-xs text-gray-500 dark:text-neutral-400">{r.club} — {r.pos} • {r.age}</div>
+                      <div className="text-xs text-gray-500 dark:text-neutral-400">
+                        {r.club} — {r.pos === "GK" ? "BR" : r.pos === "DF" ? "OB" : r.pos === "MF" ? "PO" : "NA"} • {r.age}
+                      </div>
                     </div>
-                    {scope === "trash" && selectMode && (
+                    {scope === "trash" && selectMode ? (
                       <input type="checkbox" checked={checked} onChange={() => toggleSel(r.id)} aria-label="Zaznacz" />
+                    ) : (
+                      <GrayTag>{completionFor(r.name)}% profil</GrayTag>
                     )}
                   </div>
+
+                  {/* observations block */}
+                  <div className="mt-2 rounded-md border border-gray-200 p-2 text-xs dark:border-neutral-800">
+                    <div className="mb-1 flex items-center justify-between">
+                      <span className="font-medium text-gray-700 dark:text-neutral-200">Twoje obserwacje</span>
+                      <button
+                        className="rounded border border-gray-300 px-2 py-0.5 hover:bg-gray-50 dark:border-neutral-700 dark:hover:bg-neutral-800"
+                        onClick={() => setQuickFor(quickFor === r.id ? null : r.id)}
+                      >
+                        Szybkie dodaj
+                      </button>
+                    </div>
+
+                    {playerObs.length === 0 ? (
+                      <div className="text-gray-500 dark:text-neutral-400">Brak obserwacji</div>
+                    ) : (
+                      <ul className="space-y-1">
+                        {playerObs.slice(0, 3).map((o) => (
+                          <li key={o.id} className="flex items-center justify-between">
+                            <span className="text-gray-700 dark:text-neutral-200">{o.date} · {o.match}</span>
+                            <button className="rounded px-2 py-0.5 underline-offset-2 hover:underline" onClick={() => onOpenObservation(o.id)}>
+                              Otwórz
+                            </button>
+                          </li>
+                        ))}
+                      </ul>
+                    )}
+
+                    {quickFor === r.id && (
+                      <div className="mt-2 rounded-md border border-gray-200 p-2 dark:border-neutral-800" onKeyDown={(e) => { if (e.key === "Enter") submitQuick(r.name); }}>
+                        <div className="grid grid-cols-2 gap-2">
+                          <Input placeholder="Mecz" value={qa.match} onChange={(e) => setQa((s) => ({ ...s, match: e.target.value }))} className="col-span-2 border-gray-300 dark:border-neutral-700 dark:bg-neutral-950" />
+                          <Input type="date" value={qa.date} onChange={(e) => setQa((s) => ({ ...s, date: e.target.value }))} className="border-gray-300 dark:border-neutral-700 dark:bg-neutral-950" />
+                          <Input type="time" value={qa.time} onChange={(e) => setQa((s) => ({ ...s, time: e.target.value }))} className="border-gray-300 dark:border-neutral-700 dark:bg-neutral-950" />
+                        </div>
+                        <div className="mt-2 flex items-center justify-between">
+                          <Select value={qa.status} onValueChange={(v) => setQa((s) => ({ ...s, status: v as Observation["status"] }))}>
+                            <SelectTrigger className="w-28 border-gray-300 dark:border-neutral-700 dark:bg-neutral-950">
+                              <SelectValue placeholder="Status" />
+                            </SelectTrigger>
+                            <SelectContent>
+                              <SelectItem value="draft">szkic</SelectItem>
+                              <SelectItem value="final">finalna</SelectItem>
+                            </SelectContent>
+                          </Select>
+                          <div className="flex items-center gap-2">
+                            <Button size="sm" variant="outline" className="h-7 border-gray-300 dark:border-neutral-700" onClick={() => setQuickFor(null)}>Anuluj</Button>
+                            <Button size="sm" className="h-7 bg-gray-900 text-white hover:bg-gray-800" onClick={() => submitQuick(r.name)}>Dodaj</Button>
+                          </div>
+                        </div>
+                      </div>
+                    )}
+                  </div>
+
                   <div className="mt-2 flex flex-wrap items-center justify-between gap-2">
                     <div className="flex items-center gap-2">
                       <Button size="sm" variant="outline" className="h-7 border-gray-300 dark:border-neutral-700" onClick={() => onEditPlayer(r)}>
@@ -709,17 +1255,19 @@ function MyPlayers({
             <thead className="bg-gray-50 text-gray-600 dark:bg-neutral-900 dark:text-neutral-300">
               <tr>
                 {visibleCols.select && <th className="p-2 text-left font-medium">{scope === "trash" ? <button className="rounded border px-2 py-1 text-xs dark:border-neutral-700" onClick={() => selectAll(filtered.map((r) => r.id))}>Zaznacz wszystkie</button> : null}</th>}
-                {visibleCols.name && <th className="p-2 text-left font-medium">Name</th>}
-                {visibleCols.club && <th className="p-2 text-left font-medium">Club</th>}
-                {visibleCols.pos && <th className="p-2 text-left font-medium">Pos</th>}
-                {visibleCols.age && <th className="p-2 text-left font-medium">Age</th>}
+                {visibleCols.name && <th className="p-2 text-left font-medium">Nazwa</th>}
+                {visibleCols.club && <th className="p-2 text-left font-medium">Klub</th>}
+                {visibleCols.pos && <th className="p-2 text-left font-medium">Pozycja</th>}
+                {visibleCols.age && <th className="p-2 text-left font-medium">Wiek</th>}
                 {visibleCols.status && <th className="p-2 text-left font-medium">Status</th>}
+                {visibleCols.obs && <th className="p-2 text-left font-medium">Obserwacje</th>}
                 {visibleCols.actions && <th className="p-2 text-right font-medium">{scope === "trash" && selected.length > 0 && <Button size="sm" className="h-7 bg-gray-900 text-white hover:bg-gray-800" onClick={batchRestore}>Przywróć zaznaczone</Button>}</th>}
               </tr>
             </thead>
             <tbody>
               {filtered.map((r) => {
                 const checked = selected.includes(r.id);
+                const count = observations.filter((o) => o.player === r.name).length;
                 return (
                   <tr key={r.id} className="border-t border-gray-200 dark:border-neutral-700">
                     {visibleCols.select && (
@@ -731,9 +1279,44 @@ function MyPlayers({
                     )}
                     {visibleCols.name && <td className="p-2 text-gray-900 dark:text-neutral-100">{r.name}</td>}
                     {visibleCols.club && <td className="p-2 text-gray-700 dark:text-neutral-200">{r.club}</td>}
-                    {visibleCols.pos && <td className="p-2"><GrayTag>{r.pos}</GrayTag></td>}
+                    {visibleCols.pos && <td className="p-2"><GrayTag>{r.pos === "GK" ? "BR" : r.pos === "DF" ? "OB" : r.pos === "MF" ? "PO" : "NA"}</GrayTag></td>}
                     {visibleCols.age && <td className="p-2 text-gray-700 dark:text-neutral-200">{r.age}</td>}
-                    {visibleCols.status && <td className="p-2 text-gray-700 dark:text-neutral-200">{r.status}</td>}
+                    {visibleCols.status && <td className="p-2 text-gray-700 dark:text-neutral-200">{r.status === "active" ? "aktywny" : "w koszu"}</td>}
+                    {visibleCols.obs && (
+                      <td className="p-2">
+                        <div className="flex items-center gap-2">
+                          <GrayTag>{count}</GrayTag>
+                          <button
+                            className="rounded border border-gray-300 px-2 py-0.5 text-xs hover:bg-gray-50 dark:border-neutral-700 dark:hover:bg-neutral-800"
+                            onClick={() => setQuickFor(quickFor === r.id ? null : r.id)}
+                          >
+                            Szybkie dodaj
+                          </button>
+                        </div>
+                        {quickFor === r.id && (
+                          <div className="mt-2 rounded-md border border-gray-200 p-2 text-xs dark:border-neutral-800">
+                            <div className="grid grid-cols-3 gap-2">
+                              <Input placeholder="Mecz" value={qa.match} onChange={(e) => setQa((s) => ({ ...s, match: e.target.value }))} className="col-span-3 border-gray-300 dark:border-neutral-700 dark:bg-neutral-950" />
+                              <Input type="date" value={qa.date} onChange={(e) => setQa((s) => ({ ...s, date: e.target.value }))} className="border-gray-300 dark:border-neutral-700 dark:bg-neutral-950" />
+                              <Input type="time" value={qa.time} onChange={(e) => setQa((s) => ({ ...s, time: e.target.value }))} className="border-gray-300 dark:border-neutral-700 dark:bg-neutral-950" />
+                              <Select value={qa.status} onValueChange={(v) => setQa((s) => ({ ...s, status: v as Observation["status"] }))}>
+                                <SelectTrigger className="border-gray-300 dark:border-neutral-700 dark:bg-neutral-950">
+                                  <SelectValue placeholder="Status" />
+                                </SelectTrigger>
+                                <SelectContent>
+                                  <SelectItem value="draft">szkic</SelectItem>
+                                  <SelectItem value="final">finalna</SelectItem>
+                                </SelectContent>
+                              </Select>
+                            </div>
+                            <div className="mt-2 flex items-center justify-end gap-2">
+                              <Button size="sm" variant="outline" className="h-7 border-gray-300 dark:border-neutral-700" onClick={() => setQuickFor(null)}>Anuluj</Button>
+                              <Button size="sm" className="h-7 bg-gray-900 text-white hover:bg-gray-800" onClick={() => submitQuick(r.name)}>Dodaj</Button>
+                            </div>
+                          </div>
+                        )}
+                      </td>
+                    )}
                     {visibleCols.actions && (
                       <td className="p-2 text-right">
                         <Button size="sm" variant="outline" className="mr-2 h-7 border-gray-300 dark:border-neutral-700" onClick={() => onEditPlayer(r)}>
@@ -774,17 +1357,26 @@ function MyPlayers({
 
       {/* Mobile quick controls */}
       <div className="mt-3 flex items-center gap-2 md:hidden">
+        <Input
+          value={q}
+          onChange={(e) => setQ(e.target.value)}
+          placeholder="Szukaj…"
+          className="flex-1 border-gray-300 dark:border-neutral-700 dark:bg-neutral-950"
+        />
         <Select value={scope} onValueChange={(v) => setScope(v as "active" | "trash")}>
-          <SelectTrigger className="w-32 border-gray-300 dark:border-neutral-700 dark:bg-neutral-950">
+          <SelectTrigger className="w-28 border-gray-300 dark:border-neutral-700 dark:bg-neutral-950">
             <SelectValue placeholder="Zakres" />
           </SelectTrigger>
           <SelectContent>
-            <SelectItem value="active">active</SelectItem>
-            <SelectItem value="trash">trash</SelectItem>
+            <SelectItem value="active">aktywni</SelectItem>
+            <SelectItem value="trash">kosz</SelectItem>
           </SelectContent>
         </Select>
-        <Input value={q} onChange={(e) => setQ(e.target.value)} placeholder="Szukaj…" className="flex-1 border-gray-300 dark:border-neutral-700 dark:bg-neutral-950" />
-        <Button variant="outline" className="border-gray-300 dark:border-neutral-700" onClick={() => setFiltersOpen((v) => !v)}>
+        <Button
+          variant="outline"
+          className="border-gray-300 dark:border-neutral-700"
+          onClick={() => setFiltersOpen((v) => !v)}
+        >
           <ListFilter className="h-4 w-4" />
         </Button>
       </div>
@@ -801,12 +1393,12 @@ function AddTile({ onClick }: { onClick: () => void }) {
   );
 }
 
-// ===== Add Player (same as before) =====
+// ===== Add Player =====
 function AddPlayer({ onClose }: { onClose: () => void }) {
   const [mode, setMode] = useState<"known" | "unknown" | null>(null);
   return (
     <div className="w-full">
-      <Crumb items={[{ label: "Start", href: "/" }, { label: "My Players", href: "/players" }, { label: "Dodaj" }]} />
+      <Crumb items={[{ label: "Start", href: "/" }, { label: "Baza zawodników", href: "/players" }, { label: "Dodaj" }]} />
       <Toolbar title="Dodaj zawodnika" subtitle="Wybierz tryb" right={<Button variant="outline" className="border-gray-300 dark:border-neutral-700" onClick={onClose}>Zamknij</Button>} />
       {!mode && (
         <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
@@ -901,11 +1493,15 @@ function UnknownQuickCapture() {
 
 // ===== Observations (list + editor) =====
 function ObservationsPage({
+  data,
+  setData,
   initialQuery = "",
   startForPlayer,
   onConsumedStart,
   toasts,
 }: {
+  data: Observation[];
+  setData: React.Dispatch<React.SetStateAction<Observation[]>>;
   initialQuery?: string;
   startForPlayer?: string | null;
   onConsumedStart: () => void;
@@ -969,11 +1565,6 @@ function ObservationsPage({
     localStorage.setItem(LS.obsCols, JSON.stringify(visibleCols));
   }, [visibleCols]);
 
-  const [data, setData] = useState<Observation[]>([
-    { id: 1, player: "Jan Kowalski", match: "U19 Liga", date: "2025-10-12", time: "14:00", status: "draft" },
-    { id: 2, player: "Marco Rossi", match: "U17 Puchar", date: "2025-10-14", time: "12:15", status: "final" },
-    { id: 3, player: "Ivan Petrov", match: "Sparing A", date: "2025-10-13", time: "18:30", status: "draft" },
-  ]);
   const [editing, setEditing] = useState<Observation | null>(null);
 
   useEffect(() => {
@@ -1026,16 +1617,16 @@ function ObservationsPage({
               <div className="inline-flex overflow-hidden rounded-md border border-gray-300 dark:border-neutral-700">
                 {(["all", "draft", "final"] as const).map((s) => (
                   <button key={s} className={`px-3 py-1 text-sm ${statusFilter === s ? "bg-gray-900 text-white" : "bg-white text-gray-700 dark:bg-neutral-900 dark:text-neutral-200"}`} onClick={() => setStatusFilter(s)}>
-                    {s}
+                    {s === "all" ? "wszystkie" : s === "draft" ? "szkice" : "finalne"}
                   </button>
                 ))}
               </div>
               <div className="inline-flex overflow-hidden rounded-md border border-gray-300 dark:border-neutral-700">
                 <button className={`px-3 py-1 text-sm ${view === "grid" ? "bg-gray-900 text-white" : "bg-white text-gray-700 dark:bg-neutral-900 dark:text-neutral-200"}`} onClick={() => setView("grid")}>
-                  Grid
+                  Siatka
                 </button>
                 <button className={`border-l border-gray-300 px-3 py-1 text-sm dark:border-neutral-700 ${view === "table" ? "bg-gray-900 text-white" : "bg-white text-gray-700 dark:bg-neutral-900 dark:text-neutral-200"}`} onClick={() => setView("table")}>
-                  Table
+                  Tabela
                 </button>
               </div>
 
@@ -1073,7 +1664,9 @@ function ObservationsPage({
                   <div className="mb-1 text-xs font-medium text-gray-500 dark:text-neutral-400">Widoczność (tabela)</div>
                   {obsCols.map((c) => (
                     <label key={c} className="flex cursor-pointer items-center justify-between rounded px-2 py-1 text-sm hover:bg-gray-50 dark:hover:bg-neutral-800">
-                      <span className="capitalize text-gray-800 dark:text-neutral-100">{c}</span>
+                      <span className="capitalize text-gray-800 dark:text-neutral-100">
+                        {c === "player" ? "zawodnik" : c === "match" ? "mecz" : c === "date" ? "data" : c === "time" ? "czas" : c === "status" ? "status" : "akcje"}
+                      </span>
                       <input type="checkbox" checked={visibleCols[c]} onChange={(e) => setVisibleCols((prev) => ({ ...prev, [c]: e.target.checked }))} />
                     </label>
                   ))}
@@ -1097,7 +1690,7 @@ function ObservationsPage({
               <CardContent className="space-y-2 p-3">
                 <div className="flex items-center justify-between">
                   <div className="text-sm font-medium text-gray-900 dark:text-neutral-100">{r.player}</div>
-                  <GrayTag>{r.status}</GrayTag>
+                  <GrayTag>{r.status === "draft" ? "szkic" : "finalna"}</GrayTag>
                 </div>
                 <div className="text-xs text-gray-600 dark:text-neutral-300">{r.match}</div>
                 <div className="text-xs text-gray-500 dark:text-neutral-400">{r.date} {r.time}</div>
@@ -1132,7 +1725,7 @@ function ObservationsPage({
                   {visibleCols.match && <td className="p-2 text-gray-700 dark:text-neutral-200">{r.match}</td>}
                   {visibleCols.date && <td className="p-2 text-gray-700 dark:text-neutral-200">{r.date}</td>}
                   {visibleCols.time && <td className="p-2 text-gray-700 dark:text-neutral-200">{r.time}</td>}
-                  {visibleCols.status && <td className="p-2"><GrayTag>{r.status}</GrayTag></td>}
+                  {visibleCols.status && <td className="p-2"><GrayTag>{r.status === "draft" ? "szkic" : "finalna"}</GrayTag></td>}
                   {visibleCols.actions && (
                     <td className="p-2 text-right">
                       <Button size="sm" variant="outline" className="h-7 border-gray-300 dark:border-neutral-700" onClick={() => editRow(r)}>
@@ -1155,9 +1748,9 @@ function ObservationsPage({
             <SelectValue placeholder="Status" />
           </SelectTrigger>
           <SelectContent>
-            <SelectItem value="all">all</SelectItem>
-            <SelectItem value="draft">draft</SelectItem>
-            <SelectItem value="final">final</SelectItem>
+            <SelectItem value="all">wszystkie</SelectItem>
+            <SelectItem value="draft">szkice</SelectItem>
+            <SelectItem value="final">finalne</SelectItem>
           </SelectContent>
         </Select>
         <Button variant="outline" className="border-gray-300 dark:border-neutral-700" onClick={() => setFiltersOpen((v) => !v)}>
@@ -1285,8 +1878,8 @@ function ObservationsEditor({ initial, onClose, onSave }: { initial?: Observatio
               <Select value={status} onValueChange={(v) => setStatus(v as Observation["status"])}>
                 <SelectTrigger className="border-gray-300 dark:border-neutral-700 dark:bg-neutral-950"><SelectValue placeholder="Wybierz" /></SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="draft">draft</SelectItem>
-                  <SelectItem value="final">final</SelectItem>
+                  <SelectItem value="draft">szkic</SelectItem>
+                  <SelectItem value="final">finalna</SelectItem>
                 </SelectContent>
               </Select>
             </Field>
@@ -1322,7 +1915,7 @@ function ObservationsEditor({ initial, onClose, onSave }: { initial?: Observatio
               </div>
               <div className="rounded-md border border-gray-200 dark:border-neutral-800">
                 <div className="flex items-center justify-between border-b border-gray-200 px-2 py-1.5 dark:border-neutral-800">
-                  <div className="text-xs font-medium text-gray-700 dark:text-neutral-300">Unidentified</div>
+                  <div className="text-xs font-medium text-gray-700 dark:text-neutral-300">Nieznani zawodnicy</div>
                   <GrayTag>lista</GrayTag>
                 </div>
                 <div className="max-h-40 overflow-auto p-2 space-y-1">
@@ -1351,7 +1944,7 @@ function ObservationsEditor({ initial, onClose, onSave }: { initial?: Observatio
             {selectedMatchPlayers.length > 0 && (
               <div className="mt-2 flex flex-wrap gap-2">
                 {selectedMatchPlayers.map((p, idx) => (
-                  <GrayTag key={idx}>{p.name} • {p.source === "my" ? "My" : "Unid"}</GrayTag>
+                  <GrayTag key={idx}>{p.name} • {p.source === "my" ? "Moja" : "Nieznany"}</GrayTag>
                 ))}
               </div>
             )}
@@ -1474,8 +2067,8 @@ function Autosave({ state, onSave }: { state: "idle" | "saving" | "saved"; onSav
 function Unidentified({ items }: { items: UnidSketch[] }) {
   return (
     <div className="w-full">
-      <Crumb items={[{ label: "Start", href: "/" }, { label: "My Players", href: "#" }, { label: "Unidentified" }]} />
-      <Toolbar title="Unidentified" subtitle="Szkice dodane przez skautów (mogą się dublować)" />
+      <Crumb items={[{ label: "Start", href: "/" }, { label: "Baza zawodników", href: "#" }, { label: "Nieznani zawodnicy" }]} />
+      <Toolbar title="Nieznani zawodnicy" subtitle="Szkice dodane przez skautów (mogą się dublować)" />
       <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4">
         {items.map((it) => (
           <Card key={it.id} className="border-gray-300 dark:border-neutral-700">
@@ -1490,7 +2083,7 @@ function Unidentified({ items }: { items: UnidSketch[] }) {
               <div className="text-sm font-medium text-gray-900 dark:text-neutral-100">{it.match}</div>
               <div className="text-xs text-gray-600 dark:text-neutral-300">{it.note}</div>
               <div className="flex items-center justify-between pt-2">
-                <GrayTag>Group: {it.group}</GrayTag>
+                <GrayTag>Grupa: {it.group}</GrayTag>
                 <Button size="sm" variant="outline" className="h-7 border-gray-300 dark:border-neutral-700">Promuj (Admin)</Button>
               </div>
             </CardContent>
@@ -1590,7 +2183,7 @@ function RolesAdmin({
   return (
     <div className="w-full">
       <Crumb items={[{ label: "Start", href: "/" }, { label: "Zarządzanie" }]} />
-      <Toolbar title="Zarządzanie (Scout Agent / Admin)" subtitle="Skauci, importy, duplikaty, Unidentified resolver" />
+      <Toolbar title="Zarządzanie (Scout Agent / Admin)" subtitle="Skauci, importy, duplikaty, Nieznani zawodnicy resolver" />
       <div className="grid gap-4 md:grid-cols-3">
         {/* Scouts */}
         <Card className="border-gray-300 dark:border-neutral-700">
@@ -1662,7 +2255,7 @@ function RolesAdmin({
       <div className="mt-4">
         <Card className="border-gray-300 dark:border-neutral-700">
           <CardHeader>
-            <CardTitle className="text-gray-900 dark:text-neutral-100">Unidentified — zduplikowane szkice skautów</CardTitle>
+            <CardTitle className="text-gray-900 dark:text-neutral-100">Nieznani zawodnicy — zduplikowane szkice skautów</CardTitle>
             <CardDescription className="text-gray-500 dark:text-neutral-400">Wybierz profil kanoniczny, edytuj i promuj do „Moja baza”</CardDescription>
           </CardHeader>
           <CardContent className="space-y-4">
@@ -1699,10 +2292,10 @@ function RolesAdmin({
                           <Select value={state.pos} onValueChange={(v) => setEdit(group, { pos: v as any })}>
                             <SelectTrigger className="border-gray-300 dark:border-neutral-700 dark:bg-neutral-950"><SelectValue placeholder="Wybierz" /></SelectTrigger>
                             <SelectContent>
-                              <SelectItem value="GK">GK</SelectItem>
-                              <SelectItem value="DF">DF</SelectItem>
-                              <SelectItem value="MF">MF</SelectItem>
-                              <SelectItem value="FW">FW</SelectItem>
+                              <SelectItem value="GK">BR</SelectItem>
+                              <SelectItem value="DF">OB</SelectItem>
+                              <SelectItem value="MF">PO</SelectItem>
+                              <SelectItem value="FW">NA</SelectItem>
                             </SelectContent>
                           </Select>
                         </div>
@@ -1877,7 +2470,14 @@ function MobileSidebar({
 
   if (!render) return null;
   return (
-    <div className={`fixed inset-0 z-40 transition-opacity duration-200 md:hidden ${visible ? "opacity-100" : "opacity-0"}`} aria-modal role="dialog" onClick={onClose}>
+    <div
+      className={`fixed inset-0 z-40 transition-opacity duration-200 md:hidden ${
+        visible ? "opacity-100" : "opacity-0"
+      }`}
+      aria-modal
+      role="dialog"
+      onClick={onClose}
+    >
       <div className="absolute inset-0 bg-black/20" />
       <div
         className={`absolute left-0 top-0 flex h-full w-72 flex-col transform border-r border-gray-200 bg-white shadow transition-transform duration-200 dark:border-neutral-800 dark:bg-neutral-950 ${
@@ -1891,12 +2491,19 @@ function MobileSidebar({
             <X className="h-5 w-5" />
           </button>
         </div>
+
         <nav className="flex-1 overflow-auto p-2">
           {tree.map((node) =>
             node.children ? (
               <div key={node.key} className="mb-1">
-                <button onClick={() => setOpenGroups((o) => ({ ...o, [node.key]: !o[node.key] }))} className="mb-1 inline-flex w-full items-center justify-between rounded-md px-2 py-2 text-sm hover:bg-gray-50 dark:hover:bg-neutral-900">
-                  <span className="inline-flex items-center gap-2">{node.icon && <node.icon className="h-4 w-4" />}{node.label}</span>
+                <button
+                  onClick={() => setOpenGroups((o) => ({ ...o, [node.key]: !o[node.key] }))}
+                  className="mb-1 inline-flex w-full items-center justify-between rounded-md px-2 py-2 text-sm hover:bg-gray-50 dark:hover:bg-neutral-900"
+                >
+                  <span className="inline-flex items-center gap-2">
+                    {node.icon && <node.icon className="h-4 w-4" />}
+                    {node.label}
+                  </span>
                   <ChevronDown className={"h-4 w-4 transition " + (openGroups[node.key] ? "rotate-180" : "")} />
                 </button>
                 {openGroups[node.key] && (
@@ -1912,7 +2519,9 @@ function MobileSidebar({
                           }}
                           className={
                             "mb-1 inline-flex w-full items-center gap-2 rounded-md border px-2 py-2 text-sm " +
-                            (active ? "border-gray-900 bg-gray-900 text-white" : "border-transparent text-gray-800 hover:bg-gray-50 dark:text-neutral-100 dark:hover:bg-neutral-900")
+                            (active
+                              ? "border-gray-900 bg-gray-900 text-white"
+                              : "border-transparent text-gray-800 hover:bg-gray-50 dark:text-neutral-100 dark:hover:bg-neutral-900")
                           }
                           aria-current={active ? "page" : undefined}
                         >
@@ -1933,19 +2542,26 @@ function MobileSidebar({
                 }}
                 className={
                   "mb-1 inline-flex w-full items-center gap-2 rounded-md border px-2 py-2 text-sm " +
-                  (node.page && current === node.page ? "border-gray-900 bg-gray-900 text-white" : "border-transparent text-gray-800 hover:bg-gray-50 dark:text-neutral-100 dark:hover:bg-neutral-900")
+                  (node.page && current === node.page
+                    ? "border-gray-900 bg-gray-900 text-white"
+                    : "border-transparent text-gray-800 hover:bg-gray-50 dark:text-neutral-100 dark:hover:bg-neutral-900")
                 }
                 aria-current={node.page && current === node.page ? "page" : undefined}
               >
                 {node.icon && <node.icon className="h-4 w-4" />}
                 <span>{node.label}</span>
               </button>
-            ),
+            )
           )}
         </nav>
+
+        {/* Bottom: theme + role + account */}
         <div className="border-t border-gray-200 p-2 dark:border-neutral-800">
           <div className="mb-2 flex items-center justify-between rounded-md border border-gray-200 bg-white p-2 text-sm dark:border-neutral-700 dark:bg-neutral-900">
-            <span className="inline-flex items-center gap-2">{theme === "dark" ? <Moon className="h-4 w-4" /> : <Sun className="h-4 w-4" />}Motyw</span>
+            <span className="inline-flex items-center gap-2">
+              {theme === "dark" ? <Moon className="h-4 w-4" /> : <Sun className="h-4 w-4" />}
+              Motyw
+            </span>
             <Switch checked={theme === "dark"} onCheckedChange={onToggleTheme} />
           </div>
           <div className="mb-2">
@@ -1969,258 +2585,251 @@ function MobileSidebar({
   );
 }
 
-// ===== Top-level page =====
-export default function WireframePage() {
-  // Theme
-  const [theme, setTheme] = useState<"light" | "dark">(() => (typeof window !== "undefined" ? ((localStorage.getItem(LS.theme) as "light" | "dark") || "light") : "light"));
-  useEffect(() => {
-    if (typeof window === "undefined") return;
-    localStorage.setItem(LS.theme, theme);
-    document.documentElement.classList.toggle("dark", theme === "dark");
-  }, [theme]);
+// ==== APPEND THIS TO THE VERY END OF THE FILE ====
 
-  // Default page
-  const [page, setPage] = useState<PageKey>("players");
-  const [showAdd, setShowAdd] = useState(false);
-  const [mobileOpen, setMobileOpen] = useState(false);
-  const [role, setRole] = useState<Role>(() => (typeof window !== "undefined" ? ((localStorage.getItem(LS.role) as Role) || "Administrator") : "Administrator"));
-  useEffect(() => { if (typeof window !== "undefined") localStorage.setItem(LS.role, role); }, [role]);
+// --- tiny seeds so the UI boots without external data ---
+const seedPlayers: Player[] = [
+  { id: 1, name: "Jan Kowalski", club: "Cracovia", pos: "MF", age: 21, status: "active" },
+  { id: 2, name: "Marco Rossi", club: "Torino",   pos: "FW", age: 23, status: "active" },
+  { id: 3, name: "Ivan Petrov",  club: "CSKA",     pos: "DF", age: 24, status: "trash"  },
+];
 
-  // Global search
-  const [scope, setScope] = useState<"players" | "observations" | "mybase" | "unidentified">("players");
-  const [query, setQuery] = useState("");
+const seedObs: Observation[] = [
+  { id: 1, player: "Jan Kowalski", match: "Liga A", date: "2025-04-01", time: "18:00", status: "final" },
+  { id: 2, player: "Marco Rossi",  match: "Puchar", date: "2025-04-05", time: "16:30", status: "draft" },
+];
 
-  // Notifications (visible to Scout)
-  const notif = useNotifications();
+const seedUnid: UnidSketch[] = [
+  { id: 1, group: "grp-001", jersey: 27, match: "U19 Liga", date: "2025-03-10", time: "12:00", note: "Szybki skrzydłowy", scout: "Adam" },
+  { id: 2, group: "grp-001", jersey: 27, match: "U19 Liga", date: "2025-03-10", time: "12:00", note: "Mocny pressing",     scout: "Kasia" },
+  { id: 3, group: "grp-002", jersey: 9,  match: "Sparing A", date: "2025-03-20", time: "14:15", note: "Gra tyłem do bramki", scout: "Ola" },
+];
 
-  // Players state
-  const [players, setPlayers] = useState<Player[]>(
-    Array.from({ length: 12 }).map((_, i) => ({
-      id: i + 1,
-      name: `Player #${i + 1}`,
-      club: i % 2 ? "FC Example" : "Sample United",
-      pos: ["GK", "DF", "MF", "FW"][i % 4] as Player["pos"],
-      age: 18 + (i % 12),
-      status: "active",
-    })),
+const seedMyBase: MyBaseRow[] = [
+  { id: 1, name: "Piotr Nowak", pos: "MF", source: "manual", sig: "mn-001" },
+  { id: 2, name: "Luis Diaz",   pos: "FW", source: "TM",     sig: "tm-932" },
+];
+
+// --- navigation tree (uses your icons/types) ---
+const navTree: NavNode[] = [
+  {
+    key: "players",
+    label: "Zawodnicy",
+    icon: Users,
+    children: [
+      { key: "players.list", label: "Baza zawodników", icon: Users, page: "players" },
+      { key: "players.obs",  label: "Obserwacje",      icon: NotebookPen, page: "obs" },
+      { key: "players.unid", label: "Nieznani",        icon: Shirt, page: "unidentified" },
+    ],
+  },
+  { key: "mybase", label: "Moja baza", icon: CopyCheck, page: "mybase" },
+  { key: "roles",  label: "Zarządzanie", icon: ShieldCheck, page: "roles" },
+];
+
+// --- default export: lightweight shell that renders your UI ---
+export default function S4SWireframe() {
+  // theme
+  const [theme, setTheme] = useState<"light" | "dark">(
+    (typeof window !== "undefined" && (localStorage.getItem(LS.theme) as "light" | "dark")) || "light"
   );
-  const [playerEditorOpen, setPlayerEditorOpen] = useState(false);
-  const [playerEditing, setPlayerEditing] = useState<Player | null>(null);
-  const [obsStartForPlayer, setObsStartForPlayer] = useState<string | null>(null);
+  useEffect(() => {
+    if (typeof document !== "undefined") {
+      document.documentElement.classList.toggle("dark", theme === "dark");
+    }
+    if (typeof window !== "undefined") {
+      localStorage.setItem(LS.theme, theme);
+    }
+  }, [theme]);
+  const toggleTheme = () => setTheme((t) => (t === "dark" ? "light" : "dark"));
 
-  // My Base (global) — lifted state
-  const [myBase, setMyBase] = useState<MyBaseRow[]>([
-    { id: 1, name: "Jan Kowalski", pos: "FW", source: "manual", sig: "a9f1c07e21" },
-    { id: 2, name: "#27 (U19 Liga)", pos: "LW", source: "manual", sig: "b1aa932c88" },
-    { id: 3, name: "Marco Rossi", pos: "MF", source: "LNP", sig: "c02df12b91" },
-    { id: 4, name: "Ivan Petrov", pos: "DF", source: "TM", sig: "dde1100aa2" },
-  ]);
-
-  // Unidentified sketches from many scouts (with duplicates)
-  const [unidentified, setUnidentified] = useState<UnidSketch[]>([
-    { id: 101, group: "U19-2025-10-12-27", jersey: 27, match: "U19 Liga", date: "2025-10-12", time: "14:00", note: "Lewy skrzydłowy, szybki drybling", scout: "Scout A" },
-    { id: 102, group: "U19-2025-10-12-27", jersey: 27, match: "U19 Liga", date: "2025-10-12", time: "14:00", note: "Dobre 1v1, szuka gry do środka", scout: "Scout B" },
-    { id: 103, group: "U19-2025-10-12-27", jersey: 27, match: "U19 Liga", date: "2025-10-12", time: "14:00", note: "Niezły pressing, brak dośrodkowań", scout: "Scout C" },
-    { id: 104, group: "U17-2025-10-14-4", jersey: 4, match: "U17 Puchar", date: "2025-10-14", time: "12:15", note: "Środkowy obrońca, wyprowadzenie ok", scout: "Scout A" },
-    { id: 105, group: "U17-2025-10-14-4", jersey: 4, match: "U17 Puchar", date: "2025-10-14", time: "12:15", note: "Dobra gra głową", scout: "Scout D" },
-    { id: 106, group: "Sparing-2025-10-13-9", jersey: 9, match: "Sparing A", date: "2025-10-13", time: "18:30", note: "Silny, gra tyłem do bramki", scout: "Scout B" },
-  ]);
-
-  // Toasts
-  const toastApi = useToasts();
-
-  // Nav tree (players submenu)
-  const navTree: NavNode[] = useMemo(() => {
-    const base: NavNode[] = [
-      { key: "players", label: "Players", icon: Users, children: [{ key: "players-main", label: "My Players", icon: Users, page: "players" }, { key: "players-unid", label: "Unidentified", icon: NotebookPen, page: "unidentified" }] },
-      { key: "mybase", label: "Moja baza", icon: CopyCheck, page: "mybase" },
-      { key: "obs", label: "Obserwacje", icon: FileSearch, page: "obs" },
-      { key: "settings", label: "Ustawienia", icon: ShieldCheck, page: "settings" },
-    ];
-    if (role !== "Scout") base.push({ key: "roles", label: "Zarządzanie", icon: Bug, page: "roles" });
-    return base;
+  // role
+  const [role, setRole] = useState<Role>(
+    (typeof window !== "undefined" && (localStorage.getItem(LS.role) as Role)) || "Scout"
+  );
+  useEffect(() => {
+    if (typeof window !== "undefined") localStorage.setItem(LS.role, role);
   }, [role]);
 
-  function submitSearch() {
-    if (scope === "players") setPage("players");
-    if (scope === "observations") setPage("obs");
-    if (scope === "mybase") setPage("mybase");
-    if (scope === "unidentified") setPage("unidentified");
+  // navigation + pages
+  const [page, setPage] = useState<PageKey>("players");
+  const [mobileNavOpen, setMobileNavOpen] = useState(false);
+
+  // data
+  const [players, setPlayers] = useState<Player[]>(seedPlayers);
+  const [observations, setObservations] = useState<Observation[]>(seedObs);
+  const [unid, setUnid] = useState<UnidSketch[]>(seedUnid);
+  const [mybase, setMybase] = useState<MyBaseRow[]>(seedMyBase);
+
+  // player editor
+  const [editorPlayer, setEditorPlayer] = useState<Player | null>(null);
+
+  // "start new observation for X" handoff
+  const [startForPlayer, setStartForPlayer] = useState<string | null>(null);
+
+  // notifications + toasts
+  const notifs = useNotifications();
+  const { toasts, show, dismiss } = useToasts();
+
+  // handlers expected by your components
+  function onQuickAddObservation(
+    playerName: string,
+    p: { match: string; date: string; time: string; status: Observation["status"] }
+  ) {
+    setObservations((prev) => [
+      { id: Math.max(0, ...prev.map((x) => x.id)) + 1, player: playerName, ...p },
+      ...prev,
+    ]);
+    show({ message: "Dodano obserwację" });
   }
 
-  // Player handlers
-  function handleTrash(id: number) {
-    setPlayers((prev) => prev.map((p) => (p.id === id ? { ...p, status: "trash" } : p)));
-  }
-  function handleRestore(id: number) {
-    setPlayers((prev) => prev.map((p) => (p.id === id ? { ...p, status: "active" } : p)));
-  }
-  function handleEditOpen(p: Player) {
-    setPlayerEditing(p);
-    setPlayerEditorOpen(true);
-  }
-  function handleSavePlayer(updated: Player) {
-    setPlayers((prev) => prev.map((p) => (p.id === updated.id ? { ...p, ...updated } : p)));
-  }
-  function handleAddObservationForPlayer(name: string) {
-    setObsStartForPlayer(name);
+  function onOpenObservation(_id: number) {
+    // just jump to the list; the editor can be opened from there
     setPage("obs");
   }
 
-  // Admin promotes Unidentified group -> My Base + notify scouts
-  function handlePromoteGroup(group: string, canonical: UnidSketch, edited: { name: string; pos: string }) {
-    // add to My Base
-    setMyBase((prev) => [{ id: Math.max(0, ...prev.map((x) => x.id)) + 1, name: edited.name, pos: edited.pos, source: "global", sig: (Math.random().toString(16) + "000000000").slice(2, 12) }, ...prev]);
-    // collect scouts to notify
-    const scouts = Array.from(new Set(unidentified.filter((u) => u.group === group).map((u) => u.scout)));
-    // remove group sketches
-    setUnidentified((prev) => prev.filter((u) => u.group !== group));
-    // toast for Admin
-    toastApi.show({ message: `Promowano grupę ${group} do „Moja baza”` });
-    // notifications (for Scout role)
-    scouts.forEach((s) => {
-      notif.push(`Twój szkic #${canonical.jersey} (${canonical.match}) został dodany do globalnej bazy jako ${edited.name}`);
-    });
+  function onOpenAdd() {
+    setPage("add");
+  }
+
+  function onTrash(id: number) {
+    setPlayers((prev) => prev.map((p) => (p.id === id ? { ...p, status: "trash" } : p)));
+  }
+  function onRestore(id: number) {
+    setPlayers((prev) => prev.map((p) => (p.id === id ? { ...p, status: "active" } : p)));
+  }
+
+  function onAddObservation(playerName: string) {
+    setStartForPlayer(playerName);
+    setPage("obs");
+  }
+
+  function onEditPlayer(p: Player) {
+    setEditorPlayer(p);
+    setPage("player-editor");
+  }
+
+  function onSavePlayer(updated: Player) {
+    setPlayers((prev) => prev.map((p) => (p.id === updated.id ? updated : p)));
+    show({ message: "Zapisano profil zawodnika" });
+    setPage("players");
+    setEditorPlayer(null);
+  }
+
+  function onPromoteGroup(group: string, canonical: UnidSketch, edited: { name: string; pos: string }) {
+    // remove that group's sketches
+    setUnid((prev) => prev.filter((u) => u.group !== group));
+    // add to my base
+    setMybase((prev) => [
+      { id: Date.now(), name: edited.name, pos: edited.pos, source: "manual", sig: `grp-${group}` },
+      ...prev,
+    ]);
+    notifs.push(`Promowano szkic #${canonical.jersey} (${group}) do „Moja baza”`);
+    show({ message: "Promowano do „Moja baza”" });
   }
 
   return (
-    <div className={`min-h-screen ${theme === "dark" ? "bg-neutral-950 text-neutral-100" : "bg-white text-gray-900"}`}>
+    <div className="min-h-screen bg-white text-gray-900 dark:bg-neutral-950 dark:text-neutral-100">
       {/* Top bar */}
-      <header className={`sticky top-0 z-50 border-b ${theme === "dark" ? "border-neutral-800 bg-neutral-950/90" : "border-gray-200 bg-white/90"} backdrop-blur`}>
-        <div className="flex h-12 w-full items-center justify-between px-3">
-          <div className="flex items-center gap-2">
-            <button className="rounded p-1 hover:bg-gray-50 dark:hover:bg-neutral-900 md:hidden" onClick={() => setMobileOpen(true)} aria-label="Otwórz menu">
-              <Menu className="h-5 w-5" />
-            </button>
-            <div className="h-6 w-6 rounded-md bg-gray-900" />
-            <span className="text-sm font-semibold tracking-tight">S4S — Wireframes</span>
-          </div>
-          <div className="flex items-center gap-2">
-            {/* scope + search */}
-            <Select value={scope} onValueChange={(v) => setScope(v as any)}>
-              <SelectTrigger className="w-36 border-gray-300 dark:border-neutral-700 dark:bg-neutral-950">
-                <SelectValue placeholder="Scope" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="players">Players</SelectItem>
-                <SelectItem value="observations">Observations</SelectItem>
-                <SelectItem value="mybase">My Base</SelectItem>
-                <SelectItem value="unidentified">Unidentified</SelectItem>
-              </SelectContent>
-            </Select>
-            <div className="hidden items-center gap-2 md:flex">
-              <Input
-                value={query}
-                onChange={(e) => setQuery(e.target.value)}
-                onKeyDown={(e) => {
-                  if (e.key === "Enter") submitSearch();
-                }}
-                placeholder="Szukaj…"
-                className="w-64 border-gray-300 dark:border-neutral-700 dark:bg-neutral-950"
-              />
-              <Button variant="outline" className="border-gray-300 dark:border-neutral-700" onClick={submitSearch}>
-                <FileSearch className="mr-2 h-4 w-4" />
-                Szukaj
-              </Button>
-            </div>
-            {/* Notifications for Scout */}
-            <NotificationsBell list={notif.items} onClear={notif.clear} onRemove={notif.remove} visibleForRole="Scout" role={role} />
-          </div>
+      <header className="sticky top-0 z-30 flex h-12 items-center justify-between border-b border-gray-200 bg-white px-3 dark:border-neutral-800 dark:bg-neutral-950">
+        <div className="flex items-center gap-2">
+          <button
+            className="rounded p-1 hover:bg-gray-50 dark:hover:bg-neutral-900 md:hidden"
+            onClick={() => setMobileNavOpen(true)}
+            aria-label="Otwórz menu"
+          >
+            <Menu className="h-5 w-5" />
+          </button>
+          <div className="font-medium">S4S Admin (wireframe)</div>
+        </div>
+        <div className="flex items-center gap-2">
+          <NotificationsBell
+            list={notifs.items}
+            onClear={notifs.clear}
+            onRemove={notifs.remove}
+            visibleForRole="Scout"
+            role={role}
+          />
+          <button
+            className="rounded border border-gray-300 p-1 hover:bg-gray-50 dark:border-neutral-700 dark:hover:bg-neutral-900"
+            onClick={toggleTheme}
+            aria-label="Przełącz motyw"
+          >
+            {theme === "dark" ? <Moon className="h-4 w-4" /> : <Sun className="h-4 w-4" />}
+          </button>
         </div>
       </header>
 
-      {/* Sidebar & Mobile */}
-      <SidebarNav tree={navTree} current={page} onSelect={setPage} role={role} onRoleChange={setRole} theme={theme} onToggleTheme={() => setTheme((t) => (t === "dark" ? "light" : "dark"))} />
-      <MobileSidebar open={mobileOpen} onClose={() => setMobileOpen(false)} tree={navTree} current={page} onSelect={setPage} role={role} onRoleChange={setRole} theme={theme} onToggleTheme={() => setTheme((t) => (t === "dark" ? "light" : "dark"))} />
+      {/* Sidebars */}
+      <SidebarNav
+        tree={navTree}
+        current={page}
+        onSelect={(p) => setPage(p)}
+        role={role}
+        onRoleChange={setRole}
+        theme={theme}
+        onToggleTheme={toggleTheme}
+      />
+      <MobileSidebar
+        open={mobileNavOpen}
+        onClose={() => setMobileNavOpen(false)}
+        tree={navTree}
+        current={page}
+        onSelect={(p) => setPage(p)}
+        role={role}
+        onRoleChange={setRole}
+        theme={theme}
+        onToggleTheme={toggleTheme}
+      />
 
-      {/* Content — 100% width, równe paddingi (wrapper), sidebar offset via md:ml-60 */}
-      <main className="w-full py-6">
-        <div className="px-3 md:ml-60 md:px-6">
-          {page === "players" && (
-            <MyPlayers
-              players={players}
-              onOpenAdd={() => { setPage("add"); setShowAdd(true); }}
-              onTrash={handleTrash}
-              onRestore={handleRestore}
-              onAddObservation={handleAddObservationForPlayer}
-              onEditPlayer={handleEditOpen}
-              toasts={toastApi.show}
-            />
-          )}
-          {page === "add" && showAdd && <AddPlayer onClose={() => { setShowAdd(false); setPage("players"); }} />}
-          {page === "unidentified" && <Unidentified items={unidentified} />}
-          {page === "mybase" && <MyBase rows={myBase} />}
-          {page === "obs" && (
-            <ObservationsPage
-              initialQuery={scope === "observations" ? query : ""}
-              startForPlayer={obsStartForPlayer}
-              onConsumedStart={() => setObsStartForPlayer(null)}
-              toasts={toastApi.show}
-            />
-          )}
-          {page === "settings" && <AccountSettings />}
-          {page === "roles" && <RolesAdmin unid={unidentified} onPromoteGroup={handlePromoteGroup} />}
-        </div>
+      {/* Main */}
+      <main className="mx-auto max-w px-3 py-4 md:ml-60">
+        {page === "players" && (
+          <MyPlayers
+            players={players}
+            observations={observations}
+            onQuickAddObservation={onQuickAddObservation}
+            onOpenObservation={onOpenObservation}
+            onOpenAdd={onOpenAdd}
+            onTrash={onTrash}
+            onRestore={onRestore}
+            onAddObservation={onAddObservation}
+            onEditPlayer={onEditPlayer}
+            toasts={show}
+          />
+        )}
+
+        {page === "player-editor" && editorPlayer && (
+          <PlayerEditorPage
+            player={editorPlayer}
+            onSave={onSavePlayer}
+            onClose={() => {
+              setEditorPlayer(null);
+              setPage("players");
+            }}
+          />
+        )}
+
+        {page === "add" && <AddPlayer onClose={() => setPage("players")} />}
+
+        {page === "obs" && (
+          <ObservationsPage
+            data={observations}
+            setData={setObservations}
+            onConsumedStart={() => setStartForPlayer(null)}
+            startForPlayer={startForPlayer}
+            toasts={show}
+          />
+        )}
+
+        {page === "unidentified" && <Unidentified items={unid} />}
+
+        {page === "mybase" && <MyBase rows={mybase} />}
+
+        {page === "roles" && <RolesAdmin unid={unid} onPromoteGroup={onPromoteGroup} />}
       </main>
 
-      <footer className={`py-4 text-center text-xs ${theme === "dark" ? "border-t border-neutral-800" : "border-t border-gray-200"} md:pl-60`}>
-        Grayscale UI — podgląd makiet
-      </footer>
-
-      {/* Modals + Toasts */}
-      <PlayerEditor
-        open={playerEditorOpen}
-        player={playerEditing}
-        onClose={() => setPlayerEditorOpen(false)}
-        onSave={handleSavePlayer}
-        onAddObservation={(name) => {
-          handleAddObservationForPlayer(name);
-          setPlayerEditorOpen(false);
-        }}
-        toast={toastApi.show}
-      />
-      <ToastHost toasts={toastApi.toasts} dismiss={toastApi.dismiss} />
-    </div>
-  );
-}
-
-// ===== Account Settings =====
-function AccountSettings() {
-  const [nickSeparate, setNickSeparate] = useState(true);
-  return (
-    <div className="w-full">
-      <Crumb items={[{ label: "Start", href: "/" }, { label: "Ustawienia konta" }]} />
-      <Toolbar title="Ustawienia konta" subtitle="Nick + imię/nazwisko + pełne imię" />
-      <div className="grid gap-4 md:grid-cols-2">
-        <Card className="border-gray-300 dark:border-neutral-700">
-          <CardHeader>
-            <CardTitle className="text-gray-900 dark:text-neutral-100">Dane profilu</CardTitle>
-            <CardDescription className="text-gray-500 dark:text-neutral-400">Podstawowe informacje</CardDescription>
-          </CardHeader>
-          <CardContent className="space-y-3">
-            <div><Label className="text-gray-700 dark:text-neutral-300">Nick (pseudonim)</Label><Input className="border-gray-300 dark:border-neutral-700 dark:bg-neutral-950" placeholder="np. MatB" /></div>
-            <div className="grid grid-cols-2 gap-2">
-              <div><Label className="text-gray-700 dark:text-neutral-300">Imię</Label><Input className="border-gray-300 dark:border-neutral-700 dark:bg-neutral-950" placeholder="Jan" /></div>
-              <div><Label className="text-gray-700 dark:text-neutral-300">Nazwisko</Label><Input className="border-gray-300 dark:border-neutral-700 dark:bg-neutral-950" placeholder="Kowalski" /></div>
-            </div>
-            <div><Label className="text-gray-700 dark:text-neutral-300">Pełne imię i nazwisko (full name)</Label><Input className="border-gray-300 dark:border-neutral-700 dark:bg-neutral-950" placeholder="Jan Kowalski" /></div>
-            <div className="flex items-center justify-between rounded-md border border-gray-200 bg-gray-50 p-2 dark:border-neutral-800 dark:bg-neutral-900">
-              <div className="text-xs text-gray-600 dark:text-neutral-300">Traktuj „Nick” jako oddzielne pole w systemie</div>
-              <Switch checked={nickSeparate} onCheckedChange={setNickSeparate} />
-            </div>
-          </CardContent>
-        </Card>
-        <Card className="border-gray-300 dark:border-neutral-700">
-          <CardHeader>
-            <CardTitle className="text-gray-900 dark:text-neutral-100">Preferencje</CardTitle>
-            <CardDescription className="text-gray-500 dark:text-neutral-400">Powiadomienia, prywatność</CardDescription>
-          </CardHeader>
-          <CardContent className="space-y-3">
-            <div className="flex items-center justify-between"><div className="text-sm text-gray-700 dark:text-neutral-200">Powiadomienia e-mail</div><Switch defaultChecked /></div>
-            <div className="flex items-center justify-between"><div className="text-sm text-gray-700 dark:text-neutral-200">Prywatny profil</div><Switch /></div>
-          </CardContent>
-        </Card>
-      </div>
+      {/* Toasts */}
+      <ToastHost toasts={toasts} dismiss={dismiss} />
     </div>
   );
 }
